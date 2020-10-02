@@ -3,7 +3,25 @@ name = "ligero-pc"
 version = "0.1.0"
 authors = ["kwantam <kwantam@gmail.com>"]
 edition = "2018"
+description = "polynomial commitment scheme from Ligero"
+license = "Apache-2.0"
+repository = "https://igthub.com/kwantam/ligero-pc"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+err-derive = "0.2"
+#ff = "0.8"
+fffft = "0.1"
+num-integer = "0.1"
+rayon = "1.4"
+
+[dev-dependencies]
+bitvec = "0.18"
+byteorder = "1"
+ff = { version = "0.8", features = ["derive"] }
+rand = "0.7"
+rand_core = "0.5"
+rug = "1"
+rug-fft = "0.1"
+subtle = "2.2"

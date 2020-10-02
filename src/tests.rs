@@ -6,13 +6,8 @@
 // LICENSE or https://www.apache.org/licenses/LICENSE-2.0).
 // This file may not be copied, modified, or distributed
 // except according to those terms.
-#![deny(missing_docs)]
 
-/*!
-ligero-pc is a polynomial commitment scheme based on Ligero
-*/
-
-pub mod prover;
-#[cfg(test)]
-mod tests;
-pub mod verifier;
+#[test]
+fn it_works() {
+    assert_eq!(2 + 2, 4);
+}
