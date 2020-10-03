@@ -54,7 +54,7 @@ fn get_dims() {
 
 #[test]
 fn merkleize() {
-    use super::{get_dims, LigeroCommit, merkleize, merkleize_ser};
+    use super::{get_dims, merkleize, merkleize_ser, LigeroCommit};
 
     let mut rng = rand::thread_rng();
 
@@ -65,10 +65,14 @@ fn merkleize() {
     let (n_rows, n_per_row, n_cols) = get_dims(len, rho).unwrap();
 
     let coeffs_len = (n_rows - 1) * n_per_row + 1 + (rng.gen::<usize>() % (n_per_row - 1));
-    let coeffs: Vec<Ft> = repeat_with(|| Ft::random(&mut rng)).take(coeffs_len).collect();
+    let coeffs: Vec<Ft> = repeat_with(|| Ft::random(&mut rng))
+        .take(coeffs_len)
+        .collect();
 
     let comm_len = n_rows * n_cols;
-    let comm: Vec<Ft> = repeat_with(|| Ft::random(&mut rng)).take(comm_len).collect();
+    let comm: Vec<Ft> = repeat_with(|| Ft::random(&mut rng))
+        .take(comm_len)
+        .collect();
 
     let mut test_comm = LigeroCommit::<Sha3_256, Ft> {
         comm,
@@ -78,7 +82,9 @@ fn merkleize() {
         n_cols,
         n_per_row,
         hashes: vec![<Output<Sha3_256> as Default>::default(); 2 * n_cols - 1],
-        _ghost: super::MyPhantom { _ghost: std::marker::PhantomData },
+        _ghost: super::MyPhantom {
+            _ghost: std::marker::PhantomData,
+        },
     };
     let mut test_comm_2 = test_comm.clone();
 
