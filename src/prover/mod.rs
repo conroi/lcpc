@@ -11,6 +11,8 @@
 ligero-pc prover functionality
 */
 
+use crate::FieldHash;
+
 use digest::{Digest, Output};
 use err_derive::Error;
 use fffft::{FFTError, FieldFFT};
@@ -39,17 +41,18 @@ pub enum ProverError {
 }
 
 // XXX(hack): need a Send+Sync phantom type so that LigeroCommit is Send+Sync
+#[derive(Clone)]
 struct MyPhantom<D> {
     _ghost: PhantomData<*const D>,
 }
-
 unsafe impl<D> Sync for MyPhantom<D> where D: Digest {}
 
 /// a commitment
+#[derive(Clone)]
 pub struct LigeroCommit<D, F>
 where
     D: Digest,
-    F: FieldFFT + AsRef<[u8]>,
+    F: FieldFFT + FieldHash,
 {
     comm: Vec<F>,
     coeffs: Vec<F>,
@@ -68,7 +71,7 @@ pub type ProverResult<T> = Result<T, ProverError>;
 pub fn commit<D, F>(coeffs: Vec<F>, rho: f64) -> ProverResult<LigeroCommit<D, F>>
 where
     D: Digest,
-    F: FieldFFT + AsRef<[u8]>,
+    F: FieldFFT + FieldHash,
 {
     let (n_rows, n_per_row, n_cols) = get_dims(coeffs.len(), rho)?;
 
@@ -120,11 +123,10 @@ fn get_dims(len: usize, rho: f64) -> ProverResult<(usize, usize, usize)> {
     Ok((nr, np, nc))
 }
 
-/// Merkleize the output of [commit]
-pub fn merkleize<D, F>(comm: &mut LigeroCommit<D, F>) -> ProverResult<()>
+fn merkleize<D, F>(comm: &mut LigeroCommit<D, F>) -> ProverResult<()>
 where
     D: Digest,
-    F: FieldFFT + AsRef<[u8]>,
+    F: FieldFFT + FieldHash,
 {
     // make sure commitment is self consistent
     check_comm(comm)?;
@@ -140,10 +142,47 @@ where
     Ok(())
 }
 
+#[cfg(test)]
+fn merkleize_ser<D, F>(comm: &mut LigeroCommit<D, F>) -> ProverResult<()>
+where
+    D: Digest,
+    F: FieldFFT + FieldHash,
+{
+    check_comm(comm)?;
+
+    let hashes = &mut comm.hashes;
+
+    // hash each column
+    for (col, hash) in hashes.iter_mut().enumerate().take(comm.n_cols) {
+        let mut digest = D::new();
+        digest.update(<Output<D> as Default>::default());
+        for row in 0..comm.n_rows {
+            comm.comm[row * comm.n_cols + col].digest_update(&mut digest);
+        }
+        *hash = digest.finalize();
+    }
+
+    // compute rest of Merkle tree
+    let (mut ins, mut outs) = hashes.split_at_mut(comm.n_cols);
+    while !outs.is_empty() {
+        for idx in 0..ins.len() / 2 {
+            let mut digest = D::new();
+            digest.update(ins[2 * idx].as_ref());
+            digest.update(ins[2 * idx + 1].as_ref());
+            outs[idx] = digest.finalize();
+        }
+        let (new_ins, new_outs) = outs.split_at_mut((outs.len() + 1) / 2);
+        ins = new_ins;
+        outs = new_outs;
+    }
+
+    Ok(())
+}
+
 pub(crate) fn check_comm<D, F>(comm: &LigeroCommit<D, F>) -> ProverResult<()>
 where
     D: Digest,
-    F: FieldFFT + AsRef<[u8]>,
+    F: FieldFFT + FieldHash,
 {
     let comm_sz = comm.comm.len() != comm.n_rows * comm.n_cols;
     let coeff_sz_big = comm.coeffs.len() > comm.n_rows * comm.n_per_row;
@@ -167,7 +206,7 @@ fn hash_columns<D, F>(
     offset: usize,
 ) where
     D: Digest,
-    F: FieldFFT + AsRef<[u8]>,
+    F: FieldFFT + FieldHash,
 {
     const LOG_MIN_NCOLS: usize = 6;
     if hashes.len() <= (1usize << LOG_MIN_NCOLS) {
@@ -183,7 +222,7 @@ fn hash_columns<D, F>(
         // 2. for each row, update the digests for each column
         for row in 0..n_rows {
             for (col, digest) in digests.iter_mut().enumerate() {
-                digest.update(comm[row * n_cols + offset + col]);
+                comm[row * n_cols + offset + col].digest_update(digest);
             }
         }
         // 3. finalize each digest and write the results back

@@ -16,3 +16,17 @@ pub mod prover;
 #[cfg(test)]
 mod tests;
 pub mod verifier;
+
+/// Trait for a field element that can be hashed via [Digest]
+pub trait FieldHash {
+    /// A representation of `Self` that can be converted to a slice of `u8`.
+    type HashRepr: AsRef<[u8]>;
+
+    /// Convert `Self` into a `HashRepr` for hashing
+    fn to_hash_repr(&self) -> Self::HashRepr;
+
+    /// Update the digest `d` with the `HashRepr` of `Self`
+    fn digest_update<D: digest::Digest>(&self, d: &mut D) {
+        d.update(self.to_hash_repr())
+    }
+}
