@@ -79,6 +79,22 @@ fn merkleize() {
 }
 
 #[test]
+fn eval_outer() {
+    use super::{eval_outer, eval_outer_ser};
+
+    let test_comm = random_comm();
+    let mut rng = rand::thread_rng();
+    let tensor: Vec<Ft> = repeat_with(|| Ft::random(&mut rng))
+        .take(test_comm.n_rows)
+        .collect();
+
+    let res1 = eval_outer(&test_comm, &tensor[..]).unwrap();
+    let res2 = eval_outer_ser(&test_comm, &tensor[..]).unwrap();
+
+    assert_eq!(&res1[..], &res2[..]);
+}
+
+#[test]
 fn open_column() {
     use super::{merkleize, open_column};
     use crate::FieldHash;

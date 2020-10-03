@@ -45,9 +45,15 @@ pub enum ProverError {
     /// bad column number
     #[error(display = "bad column number")]
     ColumnNumber,
+    /// bad outer tensor
+    #[error(display = "outer tensor: wrong size")]
+    OuterTensor,
 }
 
-// XXX(hack): need a Send+Sync phantom type so that LigeroCommit is Send+Sync
+// need a Send+Sync phantom type so that LigeroCommit is Send+Sync
+// could just declare LigerCommit to be Send, but spplying the Sync
+// only to PhantomData and keeping automatic Sync derivation for
+// LigeroCommit could help catch mistakes if LigerCommit changes
 #[derive(Clone)]
 struct MyPhantom<D> {
     _ghost: PhantomData<*const D>,
@@ -192,13 +198,13 @@ where
     F: FieldFFT + FieldHash,
 {
     let comm_sz = comm.comm.len() != comm.n_rows * comm.n_cols;
-    let coeff_sz_big = comm.coeffs.len() > comm.n_rows * comm.n_per_row;
-    let coeff_sz_sm = comm.coeffs.len() < (comm.n_rows - 1) * comm.n_per_row;
+    let coeff_sz_lg = comm.coeffs.len() > comm.n_rows * comm.n_per_row;
+    let coeff_sz_sm = comm.coeffs.len() <= (comm.n_rows - 1) * comm.n_per_row;
     let rate = comm.n_cols as f64 * comm.rho < comm.n_per_row as f64;
     let pow = !comm.n_cols.is_power_of_two();
     let hashlen = comm.hashes.len() != 2 * comm.n_cols - 1;
 
-    if comm_sz || coeff_sz_big || coeff_sz_sm || rate || pow || hashlen {
+    if comm_sz || coeff_sz_lg || coeff_sz_sm || rate || pow || hashlen {
         Err(ProverError::Commit)
     } else {
         Ok(())
@@ -333,4 +339,89 @@ where
 
 fn log2(v: usize) -> usize {
     (63 - (v.next_power_of_two() as u64).leading_zeros()) as usize
+}
+
+/// Evaluate the committed polynomial using the "outer" tensor
+pub fn eval_outer<D, F>(comm: &LigeroCommit<D, F>, tensor: &[F]) -> ProverResult<Vec<F>>
+where
+    D: Digest,
+    F: FieldFFT + FieldHash,
+{
+    // make sure arguments are well formed
+    check_comm(comm)?;
+    if tensor.len() != comm.n_rows {
+        return Err(ProverError::OuterTensor);
+    }
+
+    // allocate result and compute
+    let mut poly = vec![F::zero(); comm.n_per_row];
+    collapse_columns(
+        &comm.coeffs,
+        tensor,
+        &mut poly,
+        comm.n_rows,
+        comm.n_per_row,
+        0,
+    );
+
+    Ok(poly)
+}
+
+#[cfg(test)]
+fn eval_outer_ser<D, F>(comm: &LigeroCommit<D, F>, tensor: &[F]) -> ProverResult<Vec<F>>
+where
+    D: Digest,
+    F: FieldFFT + FieldHash,
+{
+    check_comm(comm)?;
+    if tensor.len() != comm.n_rows {
+        return Err(ProverError::OuterTensor);
+    }
+
+    let mut poly = vec![F::zero(); comm.n_per_row];
+    for (row, tensor_val) in tensor.iter().enumerate() {
+        for (col, val) in poly.iter_mut().enumerate() {
+            let entry = row * comm.n_per_row + col;
+            if entry < comm.coeffs.len() {
+                *val += comm.coeffs[entry] * tensor_val;
+            }
+        }
+    }
+
+    Ok(poly)
+}
+
+// helper for eval_outer
+fn collapse_columns<F>(
+    coeffs: &[F],
+    tensor: &[F],
+    poly: &mut [F],
+    n_rows: usize,
+    n_per_row: usize,
+    offset: usize,
+) where
+    F: FieldFFT,
+{
+    const LOG_MIN_NCOLS: usize = 4;
+    if poly.len() <= (1usize << LOG_MIN_NCOLS) {
+        // base case: run the computation
+        // row-by-row, compute elements of dot product
+        for (row, tensor_val) in tensor.iter().enumerate() {
+            for (col, val) in poly.iter_mut().enumerate() {
+                // need to be careful: n_rows * n_per_row >= coeffs.len()
+                let entry = row * n_per_row + offset + col;
+                if entry < coeffs.len() {
+                    *val += coeffs[entry] * tensor_val;
+                }
+            }
+        }
+    } else {
+        // recursive case: split and execute in parallel
+        let half_cols = poly.len() / 2;
+        let (lo, hi) = poly.split_at_mut(half_cols);
+        rayon::join(
+            || collapse_columns(coeffs, tensor, lo, n_rows, n_per_row, offset),
+            || collapse_columns(coeffs, tensor, hi, n_rows, n_per_row, offset + half_cols),
+        );
+    }
 }
