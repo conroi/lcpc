@@ -7,7 +7,9 @@
 // This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use digest::Output;
+use super::LigeroCommit;
+
+use digest::{Digest, Output};
 use ff::Field;
 use ft::*;
 use rand::Rng;
@@ -33,6 +35,15 @@ mod ft {
 }
 
 #[test]
+fn log2() {
+    use super::log2;
+
+    for idx in 0..31 {
+        assert_eq!(log2(1usize << idx), idx);
+    }
+}
+
+#[test]
 fn get_dims() {
     use super::get_dims;
 
@@ -54,7 +65,62 @@ fn get_dims() {
 
 #[test]
 fn merkleize() {
-    use super::{get_dims, merkleize, merkleize_ser, LigeroCommit};
+    use super::{merkleize, merkleize_ser};
+
+    let mut test_comm = random_comm();
+    let mut test_comm_2 = test_comm.clone();
+
+    merkleize(&mut test_comm).unwrap();
+    merkleize_ser(&mut test_comm_2).unwrap();
+
+    assert_eq!(&test_comm.comm, &test_comm_2.comm);
+    assert_eq!(&test_comm.coeffs, &test_comm_2.coeffs);
+    assert_eq!(&test_comm.hashes, &test_comm_2.hashes);
+}
+
+#[test]
+fn open_column() {
+    use super::{merkleize, open_column};
+    use crate::FieldHash;
+
+    let mut rng = rand::thread_rng();
+
+    let test_comm = {
+        let mut tmp = random_comm();
+        merkleize(&mut tmp).unwrap();
+        tmp
+    };
+
+    let root = test_comm.hashes.last().unwrap();
+    for _ in 0..64 {
+        let column = rng.gen::<usize>() % test_comm.n_cols;
+        let (ents, path) = open_column(&test_comm, column).unwrap();
+
+        let mut digest = Sha3_256::new();
+        digest.update(<Output<Sha3_256> as Default>::default());
+        for e in ents {
+            e.digest_update(&mut digest);
+        }
+
+        let mut hash = digest.finalize_reset();
+        let mut col = column;
+        for p in &path[..] {
+            if col % 2 == 0 {
+                digest.update(&hash);
+                digest.update(p);
+            } else {
+                digest.update(p);
+                digest.update(&hash);
+            }
+            hash = digest.finalize_reset();
+            col >>= 1;
+        }
+        assert_eq!(&hash[..], &root[..]);
+    }
+}
+
+fn random_comm() -> LigeroCommit<Sha3_256, Ft> {
+    use super::get_dims;
 
     let mut rng = rand::thread_rng();
 
@@ -74,7 +140,7 @@ fn merkleize() {
         .take(comm_len)
         .collect();
 
-    let mut test_comm = LigeroCommit::<Sha3_256, Ft> {
+    LigeroCommit::<Sha3_256, Ft> {
         comm,
         coeffs,
         rho,
@@ -85,13 +151,5 @@ fn merkleize() {
         _ghost: super::MyPhantom {
             _ghost: std::marker::PhantomData,
         },
-    };
-    let mut test_comm_2 = test_comm.clone();
-
-    merkleize(&mut test_comm).unwrap();
-    merkleize_ser(&mut test_comm_2).unwrap();
-
-    assert_eq!(&test_comm.comm, &test_comm_2.comm);
-    assert_eq!(&test_comm.coeffs, &test_comm_2.coeffs);
-    assert_eq!(&test_comm.hashes, &test_comm_2.hashes);
+    }
 }

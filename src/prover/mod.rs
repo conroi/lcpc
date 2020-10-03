@@ -11,6 +11,10 @@
 ligero-pc prover functionality
 */
 
+/* TODO
+ *   - convert fns to methods on LigeroCommit
+ */
+
 use crate::FieldHash;
 
 use digest::{Digest, Output};
@@ -28,7 +32,7 @@ mod tests;
 pub enum ProverError {
     /// bad rho value
     #[error(display = "bad rho value --- must be between 0 and 1")]
-    BadRho,
+    Rho,
     /// size too big
     #[error(display = "size is too big (n_cols overflowed). increase rho?")]
     TooBig,
@@ -37,7 +41,10 @@ pub enum ProverError {
     FFT(#[source] FFTError),
     /// inconsistent LigeroCommit fields
     #[error(display = "inconsistent commitment fields")]
-    BadCommit,
+    Commit,
+    /// bad column number
+    #[error(display = "bad column number")]
+    ColumnNumber,
 }
 
 // XXX(hack): need a Send+Sync phantom type so that LigeroCommit is Send+Sync
@@ -105,7 +112,7 @@ where
 
 fn get_dims(len: usize, rho: f64) -> ProverResult<(usize, usize, usize)> {
     if rho <= 0f64 || rho >= 1f64 {
-        return Err(ProverError::BadRho);
+        return Err(ProverError::Rho);
     }
 
     // compute #cols, which must be a power of 2
@@ -192,7 +199,7 @@ where
     let hashlen = comm.hashes.len() != 2 * comm.n_cols - 1;
 
     if comm_sz || coeff_sz_big || coeff_sz_sm || rate || pow || hashlen {
-        Err(ProverError::BadCommit)
+        Err(ProverError::Commit)
     } else {
         Ok(())
     }
@@ -264,11 +271,11 @@ where
 
     if ins.len() <= (1usize << LOG_MIN_NCOLS) {
         // base case: just compute all of the hashes
+        let mut digest = D::new();
         for idx in 0..outs.len() {
-            let mut digest = D::new();
             digest.update(ins[2 * idx].as_ref());
             digest.update(ins[2 * idx + 1].as_ref());
-            outs[idx] = digest.finalize();
+            outs[idx] = digest.finalize_reset();
         }
     } else {
         // recursive case: split and compute
@@ -279,4 +286,51 @@ where
             || merkle_layer::<D>(inr, outr),
         );
     }
+}
+
+/// Open the commitment to one column
+pub fn open_column<D, F>(
+    comm: &LigeroCommit<D, F>,
+    column: usize,
+) -> ProverResult<(Vec<F>, Vec<Output<D>>)>
+where
+    D: Digest,
+    F: FieldFFT + FieldHash,
+{
+    // make sure arguments are well formed
+    check_comm(comm)?;
+    if column >= comm.n_cols {
+        return Err(ProverError::ColumnNumber);
+    }
+
+    // column of values
+    let col = comm
+        .comm
+        .iter()
+        .skip(column)
+        .step_by(comm.n_cols)
+        .cloned()
+        .collect();
+
+    // Merkle path
+    let mask: usize = -2isize as usize;
+    let mut column = column;
+    let mut hashes = &comm.hashes[..];
+    let path_len = log2(comm.n_cols);
+    let mut path = Vec::with_capacity(path_len);
+    for _ in 0..path_len {
+        let other = (column & mask) | (!column & 1);
+        assert_eq!(other ^ column, 1);
+        path.push(hashes[other].clone());
+        let (_, hashes_new) = hashes.split_at((hashes.len() + 1) / 2);
+        hashes = hashes_new;
+        column >>= 1;
+    }
+    assert_eq!(column, 0);
+
+    Ok((col, path))
+}
+
+fn log2(v: usize) -> usize {
+    (63 - (v.next_power_of_two() as u64).leading_zeros()) as usize
 }
