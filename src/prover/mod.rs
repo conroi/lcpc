@@ -12,7 +12,8 @@ ligero-pc prover functionality
 */
 
 /* TODO
- *   - convert fns to methods on LigeroCommit
+ *   - convert fns to methods on LigeroCommit?
+ *   - randomize tree (random init block? (0_block || rand_block)?
  */
 
 use crate::FieldHash;
