@@ -11,7 +11,9 @@ use super::LigeroCommit;
 
 use digest::{Digest, Output};
 use ff::Field;
+use fffft::FieldFFT;
 use ft::*;
+use itertools::iterate;
 use rand::Rng;
 use sha3::Sha3_256;
 use std::iter::repeat_with;
@@ -133,6 +135,59 @@ fn open_column() {
         }
         assert_eq!(&hash[..], &root[..]);
     }
+}
+
+#[test]
+fn commit_uni() {
+    use super::{commit_uni, eval_outer, eval_outer_fft};
+
+    let (coeffs, rho) = random_coeffs_rho();
+    let comm = commit_uni::<Sha3_256, _>(coeffs.clone(), rho).unwrap();
+
+    //let x = Ft::random(&mut rand::thread_rng());
+    let x = Ft::one() + Ft::one();
+
+    let eval = coeffs
+        .iter()
+        .zip(iterate(Ft::one(), |&v| v * x).take(coeffs.len()))
+        .fold(Ft::zero(), |acc, (c, r)| acc + *c * r);
+
+    let roots_lo: Vec<Ft> = iterate(Ft::one(), |&v| v * x).take(comm.n_rows).collect();
+    let xr = x * roots_lo.last().unwrap();
+    let roots_hi: Vec<Ft> = iterate(Ft::one(), |&v| v * xr)
+        .take(comm.n_per_row)
+        .collect();
+    let coeffs_hi = eval_outer(&comm, &roots_lo[..]).unwrap();
+    let eval2 = coeffs_hi
+        .iter()
+        .zip(roots_hi.iter())
+        .fold(Ft::zero(), |acc, (c, r)| acc + *c * r);
+    assert_eq!(eval, eval2);
+
+    let mut poly_fft = eval_outer_fft(&comm, &roots_lo[..]).unwrap();
+    <Ft as FieldFFT>::ifft_oi(&mut poly_fft).unwrap();
+    assert!(poly_fft
+        .iter()
+        .skip(comm.n_per_row)
+        .all(|&v| v == Ft::zero()));
+    let eval3 = poly_fft
+        .iter()
+        .zip(roots_hi.iter())
+        .fold(Ft::zero(), |acc, (c, r)| acc + *c * r);
+    assert_eq!(eval2, eval3);
+}
+
+fn random_coeffs_rho() -> (Vec<Ft>, f64) {
+    let mut rng = rand::thread_rng();
+
+    let lgl = 8 + rng.gen::<usize>() % 8;
+    let len_base = 1 << (lgl - 1);
+    let len = len_base + (rng.gen::<usize>() % len_base);
+
+    (
+        repeat_with(|| Ft::random(&mut rng)).take(len).collect(),
+        rng.gen_range(0.1f64, 0.9f64),
+    )
 }
 
 fn random_comm() -> LigeroCommit<Sha3_256, Ft> {

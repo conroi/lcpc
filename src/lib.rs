@@ -17,7 +17,7 @@ pub mod prover;
 mod tests;
 pub mod verifier;
 
-/// Trait for a field element that can be hashed via [Digest]
+/// Trait for a field element that can be hashed via [digest::Digest]
 pub trait FieldHash {
     /// A representation of `Self` that can be converted to a slice of `u8`.
     type HashRepr: AsRef<[u8]>;

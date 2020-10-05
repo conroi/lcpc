@@ -87,7 +87,7 @@ where
 pub type ProverResult<T> = Result<T, ProverError>;
 
 // parallelization limit when working on columns
-const LOG_MIN_NCOLS: usize = 6;
+const LOG_MIN_NCOLS: usize = 5;
 
 /// Commit to a univariate polynomial whose coefficients are `coeffs` using Reed-Solomon rate `0 < rho < 1`.
 pub fn commit_uni<D, F>(coeffs: Vec<F>, rho: f64) -> ProverResult<LigeroCommit<D, F>>
@@ -425,4 +425,25 @@ where
     }
 
     Ok(poly)
+}
+
+#[cfg(test)]
+fn eval_outer_fft<D, F>(comm: &LigeroCommit<D, F>, tensor: &[F]) -> ProverResult<Vec<F>>
+where
+    D: Digest,
+    F: FieldFFT + FieldHash,
+{
+    check_comm(comm)?;
+    if tensor.len() != comm.n_rows {
+        return Err(ProverError::OuterTensor);
+    }
+
+    let mut poly_fft = vec![F::zero(); comm.n_cols];
+    for (coeffs, tensorval) in comm.comm.chunks(comm.n_cols).zip(tensor.iter()) {
+        for (coeff, polyval) in coeffs.iter().zip(poly_fft.iter_mut()) {
+            *polyval += *coeff * tensorval;
+        }
+    }
+
+    Ok(poly_fft)
 }
