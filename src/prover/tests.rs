@@ -45,19 +45,19 @@ fn log2() {
 
 #[test]
 fn get_dims() {
-    use super::get_dims;
+    use super::get_dims_uni;
 
     let mut rng = rand::thread_rng();
 
-    for _ in 0..16 {
+    for _ in 0..128 {
         let lgl = 8 + rng.gen::<usize>() % 8;
-        for _ in 0..16 {
+        for _ in 0..128 {
             let len_base = 1 << (lgl - 1);
             let len = len_base + (rng.gen::<usize>() % len_base);
             let rho = rng.gen_range(0.001f64, 1f64);
-            let (n_rows, n_per_row, n_cols) = get_dims(len, rho).unwrap();
+            let (n_rows, n_per_row, n_cols) = get_dims_uni(len, rho).unwrap();
             assert!(n_rows * n_per_row >= len);
-            assert!((n_rows - 1) * n_per_row < len);
+            assert!((n_per_row - 1) * n_rows < len);
             assert!(n_per_row as f64 / rho <= n_cols as f64);
         }
     }
@@ -136,7 +136,7 @@ fn open_column() {
 }
 
 fn random_comm() -> LigeroCommit<Sha3_256, Ft> {
-    use super::get_dims;
+    use super::get_dims_uni;
 
     let mut rng = rand::thread_rng();
 
@@ -144,9 +144,9 @@ fn random_comm() -> LigeroCommit<Sha3_256, Ft> {
     let len_base = 1 << (lgl - 1);
     let len = len_base + (rng.gen::<usize>() % len_base);
     let rho = rng.gen_range(0.1f64, 0.9f64);
-    let (n_rows, n_per_row, n_cols) = get_dims(len, rho).unwrap();
+    let (n_rows, n_per_row, n_cols) = get_dims_uni(len, rho).unwrap();
 
-    let coeffs_len = (n_rows - 1) * n_per_row + 1 + (rng.gen::<usize>() % (n_per_row - 1));
+    let coeffs_len = (n_per_row - 1) * n_rows + 1 + (rng.gen::<usize>() % n_rows);
     let coeffs: Vec<Ft> = repeat_with(|| Ft::random(&mut rng))
         .take(coeffs_len)
         .collect();
@@ -164,8 +164,6 @@ fn random_comm() -> LigeroCommit<Sha3_256, Ft> {
         n_cols,
         n_per_row,
         hashes: vec![<Output<Sha3_256> as Default>::default(); 2 * n_cols - 1],
-        _ghost: super::MyPhantom {
-            _ghost: std::marker::PhantomData,
-        },
+        _ghost: super::SyncPhantom::new(),
     }
 }
