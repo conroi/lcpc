@@ -393,10 +393,13 @@ fn log2(v: usize) -> usize {
 
 /// Check a column opening
 pub fn verify_column<D, F>(
-    mut column: usize,
+    column: usize,
+    log_ncols: usize,
     ents: &[F],
     path: &[Output<D>],
     root: &Output<D>,
+    poly: &[F],
+    tensor: &[F],
 ) -> bool
 where
     D: Digest,
@@ -409,9 +412,11 @@ where
         e.digest_update(&mut digest);
     }
 
+    // check Merkle path
     let mut hash = digest.finalize_reset();
+    let mut col = column;
     for p in &path[..] {
-        if column % 2 == 0 {
+        if col % 2 == 0 {
             digest.update(&hash);
             digest.update(p);
         } else {
@@ -419,10 +424,24 @@ where
             digest.update(&hash);
         }
         hash = digest.finalize_reset();
-        column >>= 1;
+        col >>= 1;
     }
+    let path_ok = &hash == root;
 
-    &hash == root
+    // root of unity for this column (bit reverse because fft is out-of-order)
+    let col_rev_bits = column.reverse_bits() >> (64 - log_ncols);
+    let root_of_unity = <F as FieldFFT>::root_of_unity().pow_vartime(&[col_rev_bits as u64]);
+    let poly_eval = poly
+        .iter()
+        .rev()
+        .fold(F::zero(), |e, c| root_of_unity * e + c);
+    let tensor_eval = tensor
+        .iter()
+        .zip(ents)
+        .fold(F::zero(), |a, (t, e)| a + *t * e);
+    let col_ok = poly_eval == tensor_eval;
+
+    path_ok && col_ok
 }
 
 /// Evaluate the committed polynomial using the "outer" tensor

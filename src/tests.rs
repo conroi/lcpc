@@ -114,9 +114,12 @@ fn open_column() {
         let (ents, path) = open_column(&test_comm, column).unwrap();
         assert!(verify_column::<Sha3_256, _>(
             column,
+            1,
             &ents[..],
             &path[..],
-            &root
+            &root,
+            &[],
+            &[],
         ));
     }
 }
