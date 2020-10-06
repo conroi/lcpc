@@ -99,7 +99,7 @@ pub type ProverResult<T> = Result<T, ProverError>;
 const LOG_MIN_NCOLS: usize = 5;
 
 /// Commit to a univariate polynomial whose coefficients are `coeffs` using Reed-Solomon rate `0 < rho < 1`.
-pub fn commit_uni<D, F>(coeffs: Vec<F>, rho: f64) -> ProverResult<LigeroCommit<D, F>>
+pub fn commit_uni<D, F>(coeffs: &[F], rho: f64) -> ProverResult<LigeroCommit<D, F>>
 where
     D: Digest,
     F: FieldFFT + FieldHash,
@@ -110,7 +110,7 @@ where
 
 /// Commit to a polynomial whose coeffs are `coeffs` using the given rate and dimensions.
 pub fn commit_with_dims<D, F>(
-    coeffs: Vec<F>,
+    coeffs_in: &[F],
     rho: f64,
     n_rows: usize,
     n_per_row: usize,
@@ -121,22 +121,30 @@ where
     F: FieldFFT + FieldHash,
 {
     // check that parameters are ok
-    assert!(n_rows * n_per_row >= coeffs.len());
-    assert!(n_rows * (n_per_row - 1) < coeffs.len());
+    assert!(n_rows * n_per_row >= coeffs_in.len());
+    assert!((n_rows - 1) * n_per_row < coeffs_in.len());
     assert!(n_cols.is_power_of_two());
     assert!(n_cols as f64 * rho >= n_per_row as f64);
 
     // matrix (encoded as a vector)
+    // XXX(zk) pad coeffs
+    let mut coeffs = vec![F::zero(); n_rows * n_per_row];
     let mut comm = vec![F::zero(); n_rows * n_cols];
 
-    // arrange coeffs in column-major order, then compute FFT
+    // local copy of coeffs with padding
+    coeffs
+        .par_chunks_mut(n_per_row)
+        .zip(coeffs_in.par_chunks(n_per_row))
+        .for_each(|(c, c_in)| {
+            c[..c_in.len()].copy_from_slice(c_in);
+        });
+
+    // now compute FFTs
     comm.par_chunks_mut(n_cols)
-        .enumerate()
-        .try_for_each(|(ridx, row)| {
-            for (val, ent) in coeffs.iter().skip(ridx).step_by(n_rows).zip(row.iter_mut()) {
-                *ent = *val;
-            }
-            <F as FieldFFT>::fft_io(row)
+        .zip(coeffs.par_chunks(n_per_row))
+        .try_for_each(|(r, c)| {
+            r[..c.len()].copy_from_slice(c);
+            <F as FieldFFT>::fft_io(r)
         })?;
 
     // compute Merkle tree
@@ -165,23 +173,11 @@ fn get_dims_uni(len: usize, rho: f64) -> ProverResult<(usize, usize, usize)> {
         .checked_next_power_of_two()
         .ok_or(ProverError::TooBig)?;
 
-    /* constraints:
-        np < nc * rho
-
-        np * nr >= len
-        ->     nr >= len / np
-        ->     nr >= len / (nc * rho)
-
-        (np - 1) * nr < len
-        ->     nr < len / (np - 1)
-    */
-
-    // minimize nr subject to requirements on np
-    let np_max = ((nc as f64) * rho).floor() as usize;
-    let nr = len / np_max + (len % np_max != 0) as usize;
-    let np = len / nr + (len % nr != 0) as usize;
-    assert!(nr * np >= len);
-    assert!(nr * (np - 1) < len);
+    // minimize nr subject to #cols and rho
+    let np = ((nc as f64) * rho).floor() as usize;
+    let nr = len / np + (len % np != 0) as usize;
+    assert!(np * nr >= len);
+    assert!(np * (nr - 1) < len);
 
     Ok((nr, np, nc))
 }
@@ -249,13 +245,12 @@ where
     F: FieldFFT + FieldHash,
 {
     let comm_sz = comm.comm.len() != comm.n_rows * comm.n_cols;
-    let coeff_sz_lg = comm.coeffs.len() > comm.n_rows * comm.n_per_row;
-    let coeff_sz_sm = comm.coeffs.len() <= comm.n_rows * (comm.n_per_row - 1);
+    let coeff_sz = comm.coeffs.len() != comm.n_rows * comm.n_per_row;
     let rate = comm.n_cols as f64 * comm.rho < comm.n_per_row as f64;
     let pow = !comm.n_cols.is_power_of_two();
     let hashlen = comm.hashes.len() != 2 * comm.n_cols - 1;
 
-    if comm_sz || coeff_sz_lg || coeff_sz_sm || rate || pow || hashlen {
+    if comm_sz || coeff_sz || rate || pow || hashlen {
         Err(ProverError::Commit)
     } else {
         Ok(())
@@ -272,7 +267,7 @@ fn hash_columns<D, F>(
     D: Digest,
     F: FieldFFT + FieldHash,
 {
-    if hashes.len() <= (1usize << LOG_MIN_NCOLS) {
+    if hashes.len() <= (1 << LOG_MIN_NCOLS) {
         // base case: run the computation
         // 1. prepare the digests for each column
         let mut digests = Vec::with_capacity(hashes.len());
@@ -325,7 +320,7 @@ where
 {
     assert_eq!(ins.len(), 2 * outs.len());
 
-    if ins.len() <= (1usize << LOG_MIN_NCOLS) {
+    if ins.len() <= (1 << LOG_MIN_NCOLS) {
         // base case: just compute all of the hashes
         let mut digest = D::new();
         for idx in 0..outs.len() {
@@ -369,13 +364,12 @@ where
         .collect();
 
     // Merkle path
-    let mask: usize = -2isize as usize;
     let mut column = column;
     let mut hashes = &comm.hashes[..];
     let path_len = log2(comm.n_cols);
     let mut path = Vec::with_capacity(path_len);
     for _ in 0..path_len {
-        let other = (column & mask) | (!column & 1);
+        let other = (column & !1) | (!column & 1);
         assert_eq!(other ^ column, 1);
         path.push(hashes[other].clone());
         let (_, hashes_new) = hashes.split_at((hashes.len() + 1) / 2);
@@ -451,16 +445,46 @@ where
 
     // allocate result and compute
     let mut poly = vec![F::zero(); comm.n_per_row];
-    comm.coeffs
-        .par_chunks(comm.n_rows)
-        .zip(poly.par_iter_mut())
-        .for_each(|(col, polyval)| {
-            for (c, t) in col.iter().zip(tensor) {
-                *polyval += *c * t;
-            }
-        });
+    collapse_columns(
+        &comm.coeffs,
+        tensor,
+        &mut poly,
+        comm.n_rows,
+        comm.n_per_row,
+        0,
+    );
 
     Ok(poly)
+}
+
+fn collapse_columns<F>(
+    coeffs: &[F],
+    tensor: &[F],
+    poly: &mut [F],
+    n_rows: usize,
+    n_per_row: usize,
+    offset: usize,
+) where
+    F: FieldFFT,
+{
+    if poly.len() <= (1 << LOG_MIN_NCOLS) {
+        // base case: run the computation
+        // row-by-row, compute elements of dot product
+        for (row, tensor_val) in tensor.iter().enumerate() {
+            for (col, val) in poly.iter_mut().enumerate() {
+                let entry = row * n_per_row + offset + col;
+                *val += coeffs[entry] * tensor_val;
+            }
+        }
+    } else {
+        // recursive case: split and execute in parallel
+        let half_cols = poly.len() / 2;
+        let (lo, hi) = poly.split_at_mut(half_cols);
+        rayon::join(
+            || collapse_columns(coeffs, tensor, lo, n_rows, n_per_row, offset),
+            || collapse_columns(coeffs, tensor, hi, n_rows, n_per_row, offset + half_cols),
+        );
+    }
 }
 
 #[cfg(test)]
@@ -475,9 +499,10 @@ where
     }
 
     let mut poly = vec![F::zero(); comm.n_per_row];
-    for (coeffs, polyval) in comm.coeffs.chunks(comm.n_rows).zip(poly.iter_mut()) {
-        for (c, t) in coeffs.iter().zip(tensor) {
-            *polyval += *c * t;
+    for (row, tensor_val) in tensor.iter().enumerate() {
+        for (col, val) in poly.iter_mut().enumerate() {
+            let entry = row * comm.n_per_row + col;
+            *val += comm.coeffs[entry] * tensor_val;
         }
     }
 

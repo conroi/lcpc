@@ -59,7 +59,7 @@ fn get_dims() {
             let rho = rng.gen_range(0.001f64, 1f64);
             let (n_rows, n_per_row, n_cols) = get_dims_uni(len, rho).unwrap();
             assert!(n_rows * n_per_row >= len);
-            assert!((n_per_row - 1) * n_rows < len);
+            assert!((n_rows - 1) * n_per_row < len);
             assert!(n_per_row as f64 / rho <= n_cols as f64);
         }
     }
@@ -128,29 +128,30 @@ fn commit_uni() {
     use super::{commit_uni, eval_outer, eval_outer_fft};
 
     let (coeffs, rho) = random_coeffs_rho();
-    let comm = commit_uni::<Sha3_256, _>(coeffs.clone(), rho).unwrap();
+    let comm = commit_uni::<Sha3_256, _>(&coeffs, rho).unwrap();
 
     //let x = Ft::random(&mut rand::thread_rng());
     let x = Ft::one() + Ft::one();
 
-    let eval = coeffs
+    let eval = comm
+        .coeffs
         .iter()
         .zip(iterate(Ft::one(), |&v| v * x).take(coeffs.len()))
         .fold(Ft::zero(), |acc, (c, r)| acc + *c * r);
 
-    let roots_lo: Vec<Ft> = iterate(Ft::one(), |&v| v * x).take(comm.n_rows).collect();
-    let xr = x * roots_lo.last().unwrap();
-    let roots_hi: Vec<Ft> = iterate(Ft::one(), |&v| v * xr)
+    let roots_lo: Vec<Ft> = iterate(Ft::one(), |&v| v * x)
         .take(comm.n_per_row)
         .collect();
-    let coeffs_hi = eval_outer(&comm, &roots_lo[..]).unwrap();
-    let eval2 = coeffs_hi
+    let xr = x * roots_lo.last().unwrap();
+    let roots_hi: Vec<Ft> = iterate(Ft::one(), |&v| v * xr).take(comm.n_rows).collect();
+    let coeffs_flattened = eval_outer(&comm, &roots_hi[..]).unwrap();
+    let eval2 = coeffs_flattened
         .iter()
-        .zip(roots_hi.iter())
+        .zip(roots_lo.iter())
         .fold(Ft::zero(), |acc, (c, r)| acc + *c * r);
     assert_eq!(eval, eval2);
 
-    let mut poly_fft = eval_outer_fft(&comm, &roots_lo[..]).unwrap();
+    let mut poly_fft = eval_outer_fft(&comm, &roots_hi[..]).unwrap();
     <Ft as FieldFFT>::ifft_oi(&mut poly_fft).unwrap();
     assert!(poly_fft
         .iter()
@@ -158,7 +159,7 @@ fn commit_uni() {
         .all(|&v| v == Ft::zero()));
     let eval3 = poly_fft
         .iter()
-        .zip(roots_hi.iter())
+        .zip(roots_lo.iter())
         .fold(Ft::zero(), |acc, (c, r)| acc + *c * r);
     assert_eq!(eval2, eval3);
 }
@@ -188,9 +189,13 @@ fn random_comm() -> LigeroCommit<Sha3_256, Ft> {
     let (n_rows, n_per_row, n_cols) = get_dims_uni(len, rho).unwrap();
 
     let coeffs_len = (n_per_row - 1) * n_rows + 1 + (rng.gen::<usize>() % n_rows);
-    let coeffs: Vec<Ft> = repeat_with(|| Ft::random(&mut rng))
-        .take(coeffs_len)
-        .collect();
+    let coeffs = {
+        let mut tmp = repeat_with(|| Ft::random(&mut rng))
+            .take(coeffs_len)
+            .collect::<Vec<Ft>>();
+        tmp.resize(n_per_row * n_rows, Ft::zero());
+        tmp
+    };
 
     let comm_len = n_rows * n_cols;
     let comm: Vec<Ft> = repeat_with(|| Ft::random(&mut rng))
