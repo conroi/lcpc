@@ -394,12 +394,11 @@ fn log2(v: usize) -> usize {
 /// Check a column opening
 pub fn verify_column<D, F>(
     column: usize,
-    log_ncols: usize,
     ents: &[F],
     path: &[Output<D>],
     root: &Output<D>,
-    poly: &[F],
     tensor: &[F],
+    poly_eval: &F,
 ) -> bool
 where
     D: Digest,
@@ -429,17 +428,11 @@ where
     let path_ok = &hash == root;
 
     // root of unity for this column (bit reverse because fft is out-of-order)
-    let col_rev_bits = column.reverse_bits() >> (64 - log_ncols);
-    let root_of_unity = <F as FieldFFT>::root_of_unity().pow_vartime(&[col_rev_bits as u64]);
-    let poly_eval = poly
-        .iter()
-        .rev()
-        .fold(F::zero(), |e, c| root_of_unity * e + c);
     let tensor_eval = tensor
         .iter()
         .zip(ents)
         .fold(F::zero(), |a, (t, e)| a + *t * e);
-    let col_ok = poly_eval == tensor_eval;
+    let col_ok = poly_eval == &tensor_eval;
 
     path_ok && col_ok
 }
