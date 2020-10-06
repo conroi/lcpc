@@ -391,6 +391,40 @@ fn log2(v: usize) -> usize {
     (63 - (v.next_power_of_two() as u64).leading_zeros()) as usize
 }
 
+/// Check a column opening
+pub fn verify_column<D, F>(
+    mut column: usize,
+    ents: &[F],
+    path: &[Output<D>],
+    root: &Output<D>,
+) -> bool
+where
+    D: Digest,
+    F: FieldFFT + FieldHash,
+{
+    let mut digest = D::new();
+    // XXX(zk) instead of 0, use a random value here
+    digest.update(<Output<D> as Default>::default());
+    for e in ents {
+        e.digest_update(&mut digest);
+    }
+
+    let mut hash = digest.finalize_reset();
+    for p in &path[..] {
+        if column % 2 == 0 {
+            digest.update(&hash);
+            digest.update(p);
+        } else {
+            digest.update(p);
+            digest.update(&hash);
+        }
+        hash = digest.finalize_reset();
+        column >>= 1;
+    }
+
+    &hash == root
+}
+
 /// Evaluate the committed polynomial using the "outer" tensor
 pub fn eval_outer<D, F>(comm: &LigeroCommit<D, F>, tensor: &[F]) -> ProverResult<Vec<F>>
 where

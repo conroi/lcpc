@@ -9,7 +9,7 @@
 
 use super::LigeroCommit;
 
-use digest::{Digest, Output};
+use digest::Output;
 use ff::Field;
 use fffft::FieldFFT;
 use ft::*;
@@ -98,8 +98,7 @@ fn eval_outer() {
 
 #[test]
 fn open_column() {
-    use super::FieldHash;
-    use super::{merkleize, open_column};
+    use super::{merkleize, open_column, verify_column};
 
     let mut rng = rand::thread_rng();
 
@@ -113,28 +112,12 @@ fn open_column() {
     for _ in 0..64 {
         let column = rng.gen::<usize>() % test_comm.n_cols;
         let (ents, path) = open_column(&test_comm, column).unwrap();
-
-        let mut digest = Sha3_256::new();
-        // XXX(zk) instead of 0, use a random value here
-        digest.update(<Output<Sha3_256> as Default>::default());
-        for e in ents {
-            e.digest_update(&mut digest);
-        }
-
-        let mut hash = digest.finalize_reset();
-        let mut col = column;
-        for p in &path[..] {
-            if col % 2 == 0 {
-                digest.update(&hash);
-                digest.update(p);
-            } else {
-                digest.update(p);
-                digest.update(&hash);
-            }
-            hash = digest.finalize_reset();
-            col >>= 1;
-        }
-        assert_eq!(&hash[..], &root[..]);
+        assert!(verify_column::<Sha3_256, _>(
+            column,
+            &ents[..],
+            &path[..],
+            &root
+        ));
     }
 }
 
