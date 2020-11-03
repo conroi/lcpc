@@ -1,6 +1,6 @@
 // Copyright 2020 Riad S. Wahby <rsw@cs.stanford.edu>
 //
-// This file is part of fffft.
+// This file is part of ligero-pc.
 //
 // Licensed under the Apache License, Version 2.0 (see
 // LICENSE or https://www.apache.org/licenses/LICENSE-2.0).
