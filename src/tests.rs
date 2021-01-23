@@ -47,7 +47,7 @@ fn log2() {
 
 #[test]
 fn get_dims() {
-    use super::get_dims_uni;
+    use super::get_dims;
 
     let mut rng = rand::thread_rng();
 
@@ -57,7 +57,7 @@ fn get_dims() {
             let len_base = 1 << (lgl - 1);
             let len = len_base + (rng.gen::<usize>() % len_base);
             let rho = rng.gen_range(0.001f64, 1f64);
-            let (n_rows, n_per_row, n_cols) = get_dims_uni(len, rho).unwrap();
+            let (n_rows, n_per_row, n_cols) = get_dims(len, rho).unwrap();
             assert!(n_rows * n_per_row >= len);
             assert!((n_rows - 1) * n_per_row < len);
             assert!(n_per_row as f64 / rho <= n_cols as f64);
@@ -124,11 +124,11 @@ fn open_column() {
 }
 
 #[test]
-fn commit_uni() {
-    use super::{commit_uni, eval_outer, eval_outer_fft};
+fn commit() {
+    use super::{commit, eval_outer, eval_outer_fft};
 
     let (coeffs, rho) = random_coeffs_rho();
-    let comm = commit_uni::<Sha3_256, _>(&coeffs, rho).unwrap();
+    let comm = commit::<Sha3_256, _>(&coeffs, rho).unwrap();
 
     //let x = Ft::random(&mut rand::thread_rng());
     let x = Ft::one() + Ft::one();
@@ -178,7 +178,7 @@ fn random_coeffs_rho() -> (Vec<Ft>, f64) {
 }
 
 fn random_comm() -> LigeroCommit<Sha3_256, Ft> {
-    use super::get_dims_uni;
+    use super::get_dims;
 
     let mut rng = rand::thread_rng();
 
@@ -186,7 +186,7 @@ fn random_comm() -> LigeroCommit<Sha3_256, Ft> {
     let len_base = 1 << (lgl - 1);
     let len = len_base + (rng.gen::<usize>() % len_base);
     let rho = rng.gen_range(0.1f64, 0.9f64);
-    let (n_rows, n_per_row, n_cols) = get_dims_uni(len, rho).unwrap();
+    let (n_rows, n_per_row, n_cols) = get_dims(len, rho).unwrap();
 
     let coeffs_len = (n_per_row - 1) * n_rows + 1 + (rng.gen::<usize>() % n_rows);
     let coeffs = {
@@ -210,6 +210,5 @@ fn random_comm() -> LigeroCommit<Sha3_256, Ft> {
         n_cols,
         n_per_row,
         hashes: vec![<Output<Sha3_256> as Default>::default(); 2 * n_cols - 1],
-        _ghost: super::SyncPhantom::new(),
     }
 }

@@ -16,7 +16,6 @@ use digest::{Digest, Output};
 use err_derive::Error;
 use fffft::{FFTError, FieldFFT};
 use rayon::prelude::*;
-use std::marker::PhantomData;
 
 #[cfg(test)]
 mod tests;
@@ -58,23 +57,6 @@ pub enum ProverError {
     OuterTensor,
 }
 
-// need a Send+Sync phantom type so that LigeroCommit is Send+Sync
-// could just declare LigerCommit to be Send, but spplying the Sync
-// only to PhantomData and keeping automatic Sync derivation for
-// LigeroCommit could help catch mistakes if LigerCommit changes
-#[derive(Clone)]
-struct SyncPhantom<D> {
-    _ghost: PhantomData<*const D>,
-}
-unsafe impl<D> Sync for SyncPhantom<D> where D: Digest {}
-impl<D> SyncPhantom<D> {
-    fn new() -> Self {
-        Self {
-            _ghost: PhantomData,
-        }
-    }
-}
-
 /// a commitment
 #[derive(Clone)]
 pub struct LigeroCommit<D, F>
@@ -89,7 +71,6 @@ where
     n_cols: usize,
     n_per_row: usize,
     hashes: Vec<Output<D>>,
-    _ghost: SyncPhantom<D>,
 }
 
 /// result of a prover operation
@@ -99,12 +80,12 @@ pub type ProverResult<T> = Result<T, ProverError>;
 const LOG_MIN_NCOLS: usize = 5;
 
 /// Commit to a univariate polynomial whose coefficients are `coeffs` using Reed-Solomon rate `0 < rho < 1`.
-pub fn commit_uni<D, F>(coeffs: &[F], rho: f64) -> ProverResult<LigeroCommit<D, F>>
+pub fn commit<D, F>(coeffs: &[F], rho: f64) -> ProverResult<LigeroCommit<D, F>>
 where
     D: Digest,
     F: FieldFFT + FieldHash,
 {
-    let (n_rows, n_per_row, n_cols) = get_dims_uni(coeffs.len(), rho)?;
+    let (n_rows, n_per_row, n_cols) = get_dims(coeffs.len(), rho)?;
     commit_with_dims(coeffs, rho, n_rows, n_per_row, n_cols)
 }
 
@@ -156,14 +137,13 @@ where
         n_cols,
         n_per_row,
         hashes: vec![<Output<D> as Default>::default(); 2 * n_cols - 1],
-        _ghost: SyncPhantom::new(),
     };
     merkleize(&mut ret)?;
 
     Ok(ret)
 }
 
-fn get_dims_uni(len: usize, rho: f64) -> ProverResult<(usize, usize, usize)> {
+fn get_dims(len: usize, rho: f64) -> ProverResult<(usize, usize, usize)> {
     if rho <= 0f64 || rho >= 1f64 {
         return Err(ProverError::Rho);
     }
