@@ -110,16 +110,9 @@ fn open_column() {
 
     let root = test_comm.hashes.last().unwrap();
     for _ in 0..64 {
-        let column = rng.gen::<usize>() % test_comm.n_cols;
-        let (ents, path) = open_column(&test_comm, column).unwrap();
-        assert!(verify_column::<Sha3_256, _>(
-            column,
-            &ents[..],
-            &path[..],
-            &root,
-            &[],
-            &Ft::zero(),
-        ));
+        let col_num = rng.gen::<usize>() % test_comm.n_cols;
+        let column = open_column(&test_comm, col_num).unwrap();
+        assert!(verify_column::<Sha3_256, _>(&column, col_num, &root, &[], &Ft::zero(),).is_ok());
     }
 }
 
@@ -128,7 +121,7 @@ fn commit() {
     use super::{commit, eval_outer, eval_outer_fft};
 
     let (coeffs, rho) = random_coeffs_rho();
-    let comm = commit::<Sha3_256, _>(&coeffs, rho).unwrap();
+    let comm = commit::<Sha3_256, _>(&coeffs, rho, 128usize).unwrap();
 
     //let x = Ft::random(&mut rand::thread_rng());
     let x = Ft::one() + Ft::one();
@@ -206,6 +199,7 @@ fn random_comm() -> LigeroCommit<Sha3_256, Ft> {
         comm,
         coeffs,
         rho,
+        n_col_opens: 128usize,
         n_rows,
         n_cols,
         n_per_row,

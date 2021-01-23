@@ -13,6 +13,8 @@ repository = "https://igthub.com/kwantam/ligero-pc"
 err-derive = "0.2"
 digest = "0.9"
 fffft = "0.2"
+merlin = "2.0"
+rand_chacha = "0.3"
 rayon = "1.4"
 
 [dev-dependencies]

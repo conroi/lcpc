@@ -15,7 +15,13 @@ ligero-pc is a polynomial commitment scheme based on Ligero
 use digest::{Digest, Output};
 use err_derive::Error;
 use fffft::{FFTError, FieldFFT};
+use merlin::Transcript;
+use rand_chacha::{
+    rand_core::{RngCore, SeedableRng},
+    ChaCha20Rng,
+};
 use rayon::prelude::*;
+use std::iter::repeat_with;
 
 #[cfg(test)]
 mod tests;
@@ -29,8 +35,13 @@ pub trait FieldHash {
     fn to_hash_repr(&self) -> Self::HashRepr;
 
     /// Update the digest `d` with the `HashRepr` of `Self`
-    fn digest_update<D: digest::Digest>(&self, d: &mut D) {
+    fn digest_update<D: Digest>(&self, d: &mut D) {
         d.update(self.to_hash_repr())
+    }
+
+    /// Update the [merlin::Transcript] `t` with the `HashRepr` of `Self` with label `l`
+    fn transcript_update(&self, t: &mut Transcript, l: &'static [u8]) {
+        t.append_message(l, self.to_hash_repr().as_ref())
     }
 }
 
@@ -57,6 +68,26 @@ pub enum ProverError {
     OuterTensor,
 }
 
+/// result of a prover operation
+pub type ProverResult<T> = Result<T, ProverError>;
+
+/// Err variant for verifier operations
+#[derive(Debug, Error)]
+pub enum VerifierError {
+    /// wrong number of column openings in proof
+    #[error(display = "wrong number of column openings in proof")]
+    NumColOpens,
+    /// failed to verify column merkle path
+    #[error(display = "column verification: merkle path failed")]
+    ColumnPath,
+    /// failed to verify column dot product
+    #[error(display = "column verification: dot product failed")]
+    ColumnValue,
+}
+
+/// result of a verifier operation
+pub type VerifierResult<T> = Result<T, VerifierError>;
+
 /// a commitment
 #[derive(Clone)]
 pub struct LigeroCommit<D, F>
@@ -67,32 +98,70 @@ where
     comm: Vec<F>,
     coeffs: Vec<F>,
     rho: f64,
+    n_col_opens: usize,
     n_rows: usize,
     n_cols: usize,
     n_per_row: usize,
     hashes: Vec<Output<D>>,
 }
 
-/// result of a prover operation
-pub type ProverResult<T> = Result<T, ProverError>;
+/// A column opening and the corresponding Merkle path.
+#[derive(Clone)]
+pub struct LigeroColumn<D, F>
+where
+    D: Digest,
+    F: FieldFFT + FieldHash,
+{
+    col: Vec<F>,
+    path: Vec<Output<D>>,
+}
+
+// used locally to hash columns into the transcript
+impl<D, F> LigeroColumn<D, F>
+where
+    D: Digest,
+    F: FieldFFT + FieldHash,
+{
+    fn transcript_update(&self, t: &mut Transcript, l: &'static [u8]) {
+        self.col
+            .iter()
+            .for_each(|col_ent| t.append_message(l, col_ent.to_hash_repr().as_ref()));
+        self.path
+            .iter()
+            .for_each(|path_ent| t.append_message(l, path_ent.as_ref()));
+    }
+}
+
+/// An evaluation and proof of its correctness and of the low-degreeness of the commitment.
+#[derive(Clone)]
+pub struct LigeroEvalProof<D, F>
+where
+    D: Digest,
+    F: FieldFFT + FieldHash,
+{
+    p_eval: Vec<F>,
+    p_random: Vec<F>,
+    columns: Vec<LigeroColumn<D, F>>,
+}
 
 // parallelization limit when working on columns
 const LOG_MIN_NCOLS: usize = 5;
 
 /// Commit to a univariate polynomial whose coefficients are `coeffs` using Reed-Solomon rate `0 < rho < 1`.
-pub fn commit<D, F>(coeffs: &[F], rho: f64) -> ProverResult<LigeroCommit<D, F>>
+pub fn commit<D, F>(coeffs: &[F], rho: f64, n_col_opens: usize) -> ProverResult<LigeroCommit<D, F>>
 where
     D: Digest,
     F: FieldFFT + FieldHash,
 {
     let (n_rows, n_per_row, n_cols) = get_dims(coeffs.len(), rho)?;
-    commit_with_dims(coeffs, rho, n_rows, n_per_row, n_cols)
+    commit_with_dims(coeffs, rho, n_col_opens, n_rows, n_per_row, n_cols)
 }
 
 /// Commit to a polynomial whose coeffs are `coeffs` using the given rate and dimensions.
 pub fn commit_with_dims<D, F>(
     coeffs_in: &[F],
     rho: f64,
+    n_col_opens: usize,
     n_rows: usize,
     n_per_row: usize,
     n_cols: usize,
@@ -133,6 +202,7 @@ where
         comm,
         coeffs,
         rho,
+        n_col_opens,
         n_rows,
         n_cols,
         n_per_row,
@@ -194,7 +264,6 @@ where
     // hash each column
     for (col, hash) in hashes.iter_mut().enumerate().take(comm.n_cols) {
         let mut digest = D::new();
-        // XXX(zk) instead of 0, use a random value here
         digest.update(<Output<D> as Default>::default());
         for row in 0..comm.n_rows {
             comm.comm[row * comm.n_cols + col].digest_update(&mut digest);
@@ -254,7 +323,6 @@ fn hash_columns<D, F>(
         for _ in 0..hashes.len() {
             // column hashes start with a block of 0's
             let mut dig = D::new();
-            // XXX(zk) instead of 0, use a random value here
             dig.update(<Output<D> as Default>::default());
             digests.push(dig);
         }
@@ -323,7 +391,7 @@ where
 pub fn open_column<D, F>(
     comm: &LigeroCommit<D, F>,
     column: usize,
-) -> ProverResult<(Vec<F>, Vec<Output<D>>)>
+) -> ProverResult<LigeroColumn<D, F>>
 where
     D: Digest,
     F: FieldFFT + FieldHash,
@@ -358,7 +426,7 @@ where
     }
     assert_eq!(column, 0);
 
-    Ok((col, path))
+    Ok(LigeroColumn { col, path })
 }
 
 fn log2(v: usize) -> usize {
@@ -367,28 +435,26 @@ fn log2(v: usize) -> usize {
 
 /// Check a column opening
 pub fn verify_column<D, F>(
-    column: usize,
-    ents: &[F],
-    path: &[Output<D>],
+    column: &LigeroColumn<D, F>,
+    col_num: usize,
     root: &Output<D>,
     tensor: &[F],
     poly_eval: &F,
-) -> bool
+) -> VerifierResult<()>
 where
     D: Digest,
     F: FieldFFT + FieldHash,
 {
     let mut digest = D::new();
-    // XXX(zk) instead of 0, use a random value here
     digest.update(<Output<D> as Default>::default());
-    for e in ents {
+    for e in &column.col[..] {
         e.digest_update(&mut digest);
     }
 
     // check Merkle path
     let mut hash = digest.finalize_reset();
-    let mut col = column;
-    for p in &path[..] {
+    let mut col = col_num;
+    for p in &column.path[..] {
         if col % 2 == 0 {
             digest.update(&hash);
             digest.update(p);
@@ -399,16 +465,86 @@ where
         hash = digest.finalize_reset();
         col >>= 1;
     }
-    let path_ok = &hash == root;
+    if &hash != root {
+        return Err(VerifierError::ColumnPath);
+    }
 
     // root of unity for this column (bit reverse because fft is out-of-order)
     let tensor_eval = tensor
         .iter()
-        .zip(ents)
+        .zip(&column.col[..])
         .fold(F::zero(), |a, (t, e)| a + *t * e);
-    let col_ok = poly_eval == &tensor_eval;
+    if poly_eval != &tensor_eval {
+        return Err(VerifierError::ColumnValue);
+    }
 
-    path_ok && col_ok
+    Ok(())
+}
+
+/// Evaluate the committed polynomial using the supplied "outer" tensor
+/// and generate a proof of (1) low-degreeness and (2) correct evaluation.
+pub fn eval<D, F>(
+    comm: &LigeroCommit<D, F>,
+    tensor: &[F],
+    tr: &mut Transcript,
+) -> ProverResult<LigeroEvalProof<D, F>>
+where
+    D: Digest,
+    F: FieldFFT + FieldHash,
+{
+    // first, evaluate the polynomial using the supplied tensor
+    let p_eval = {
+        let mut tmp = eval_outer(comm, tensor)?;
+        <F as FieldFFT>::ifft_oi(&mut tmp)?;
+        assert!(tmp.iter().skip(comm.n_per_row).all(|&v| v == F::zero()));
+        tmp.truncate(comm.n_per_row);
+        tmp
+    };
+    // add p_eval to the transcript
+    p_eval
+        .iter()
+        .for_each(|coeff| coeff.transcript_update(tr, b"ligero-pc//eval//p_eval"));
+
+    // next, evaluate the polynomial on a random tensor (degree test)
+    let p_random = {
+        let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
+        tr.challenge_bytes(b"ligero-pc//eval//degree_test", &mut key);
+        let mut deg_test_rng = ChaCha20Rng::from_seed(key);
+        let rand_tensor: Vec<F> = repeat_with(|| F::random(&mut deg_test_rng))
+            .take(comm.n_rows)
+            .collect();
+        let mut tmp = eval_outer(comm, &rand_tensor)?;
+        <F as FieldFFT>::ifft_oi(&mut tmp)?;
+        assert!(tmp.iter().skip(comm.n_per_row).all(|&v| v == F::zero()));
+        tmp.truncate(comm.n_per_row);
+        tmp
+    };
+    // add p_random to the transcript
+    p_random
+        .iter()
+        .for_each(|coeff| coeff.transcript_update(tr, b"ligero-pc//eval//p_random"));
+
+    // now extract the column numbers to open
+    // XXX(F-S) should we do this column-by-column, updating the transcript for each???
+    //          It doesn't seem necessary to me...
+    let columns: Vec<LigeroColumn<D, F>> = {
+        let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
+        tr.challenge_bytes(b"ligero-pc//eval//cols_to_open", &mut key);
+        let mut cols_rng = ChaCha20Rng::from_seed(key);
+        repeat_with(|| open_column(comm, cols_rng.next_u64() as usize))
+            .take(comm.n_col_opens)
+            .collect::<ProverResult<Vec<LigeroColumn<D, F>>>>()?
+    };
+    // add columns to the transcript
+    columns
+        .iter()
+        .for_each(|col| col.transcript_update(tr, b"ligero-pc//eval//columns"));
+
+    Ok(LigeroEvalProof {
+        p_eval,
+        p_random,
+        columns,
+    })
 }
 
 /// Evaluate the committed polynomial using the "outer" tensor
