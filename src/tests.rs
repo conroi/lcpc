@@ -56,7 +56,7 @@ fn get_dims() {
         for _ in 0..128 {
             let len_base = 1 << (lgl - 1);
             let len = len_base + (rng.gen::<usize>() % len_base);
-            let rho = rng.gen_range(0.001f64, 1f64);
+            let rho = rng.gen_range(0.001f64..1f64);
             let (n_rows, n_per_row, n_cols) = get_dims(len, rho).unwrap();
             assert!(n_rows * n_per_row >= len);
             assert!((n_rows - 1) * n_per_row < len);
@@ -173,7 +173,7 @@ fn random_coeffs_rho() -> (Vec<Ft>, f64) {
 
     (
         repeat_with(|| Ft::random(&mut rng)).take(len).collect(),
-        rng.gen_range(0.1f64, 0.9f64),
+        rng.gen_range(0.1f64..0.9f64),
     )
 }
 
@@ -185,7 +185,7 @@ fn random_comm() -> LigeroCommit<Sha3_256, Ft> {
     let lgl = 8 + rng.gen::<usize>() % 8;
     let len_base = 1 << (lgl - 1);
     let len = len_base + (rng.gen::<usize>() % len_base);
-    let rho = rng.gen_range(0.1f64, 0.9f64);
+    let rho = rng.gen_range(0.1f64..0.9f64);
     let (n_rows, n_per_row, n_cols) = get_dims(len, rho).unwrap();
 
     let coeffs_len = (n_per_row - 1) * n_rows + 1 + (rng.gen::<usize>() % n_rows);
