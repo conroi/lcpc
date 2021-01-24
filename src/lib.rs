@@ -121,6 +121,17 @@ where
     hashes: Vec<Output<D>>,
 }
 
+impl<D, F> LigeroCommit<D, F>
+where
+    D: Digest,
+    F: FieldFFT + FieldHash,
+{
+    /// returns the Merkle root of this polynomial commitment (which is the commitment itself)
+    pub fn get_root(&self) -> Option<Output<D>> {
+        self.hashes.last().cloned()
+    }
+}
+
 /// A column opening and the corresponding Merkle path.
 #[derive(Clone)]
 pub struct LigeroColumn<D, F>
@@ -173,8 +184,8 @@ where
     commit_with_dims(coeffs, rho, n_col_opens, n_rows, n_per_row, n_cols)
 }
 
-// Commit to a polynomial whose coeffs are `coeffs` using the given rate and dimensions.
-fn commit_with_dims<D, F>(
+/// Commit to a polynomial whose coeffs are `coeffs_in` using the given rate and dimensions.
+pub fn commit_with_dims<D, F>(
     coeffs_in: &[F],
     rho: f64,
     n_col_opens: usize,

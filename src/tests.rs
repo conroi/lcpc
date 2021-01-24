@@ -109,7 +109,7 @@ fn open_column() {
         tmp
     };
 
-    let root = test_comm.hashes.last().unwrap();
+    let root = test_comm.get_root().unwrap();
     for _ in 0..64 {
         let col_num = rng.gen::<usize>() % test_comm.n_cols;
         let column = open_column(&test_comm, col_num).unwrap();
@@ -174,7 +174,7 @@ fn end_to_end() {
     let n_col_opens = 128usize;
     let comm = commit::<Sha3_256, _>(&coeffs, rho, n_col_opens).unwrap();
     // this is the polynomial commitment
-    let root = comm.hashes.last().unwrap();
+    let root = comm.get_root().unwrap();
 
     // evaluate the random polynomial we just generated at a random point x
     let x = Ft::random(&mut rand::thread_rng());
@@ -209,7 +209,7 @@ fn end_to_end() {
     tr2.append_message(b"rate", &rho.to_be_bytes()[..]);
     tr2.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
     let res = verify(
-        root,
+        &root,
         &outer_tensor[..],
         &inner_tensor[..],
         &pf,
