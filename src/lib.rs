@@ -84,15 +84,21 @@ pub enum VerifierError {
     /// failed to verify column merkle path
     #[error(display = "column verification: merkle path failed")]
     ColumnPath,
-    /// failed to verify column dot product
-    #[error(display = "column verification: dot product failed")]
-    ColumnValue,
+    /// failed to verify column dot product for poly eval
+    #[error(display = "column verification: eval dot product failed")]
+    ColumnEval,
+    /// failed to verify column dot product for degree test
+    #[error(display = "column verification: degree test dot product failed")]
+    ColumnDegree,
     /// bad outer tensor
     #[error(display = "outer tensor: wrong size")]
     OuterTensor,
     /// bad inner tensor
     #[error(display = "inner tensor: wrong size")]
     InnerTensor,
+    /// error computing FFT
+    #[error(display = "fft error: {:?}", _0)]
+    FFT(#[source] FFTError),
 }
 
 /// result of a verifier operation
@@ -470,26 +476,73 @@ where
         return Err(VerifierError::Rho);
     }
 
-    // step 1: check p_random
+    // step 1: random tensor for degree test and random columns to test
+    // step 1a: extract random tensor from transcript
+    let rand_tensor: Vec<F> = {
+        let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
+        tr.challenge_bytes(b"ligero-pc//eval//degree_test", &mut key);
+        let mut deg_test_rng = ChaCha20Rng::from_seed(key);
+        // XXX(optimization) could expand seed in parallel instead of in series
+        repeat_with(|| F::random(&mut deg_test_rng))
+            .take(n_rows)
+            .collect()
+    };
+    // step 1b: push p_random and p_eval into transcript
+    proof
+        .p_random
+        .iter()
+        .for_each(|coeff| coeff.transcript_update(tr, b"ligero-pc//eval//p_random"));
+    proof
+        .p_eval
+        .iter()
+        .for_each(|coeff| coeff.transcript_update(tr, b"ligero-pc//eval//p_eval"));
+    // step 1c: extract columns to open
+    let cols_to_open: Vec<usize> = {
+        let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
+        tr.challenge_bytes(b"ligero-pc//eval//cols_to_open", &mut key);
+        let mut cols_rng = ChaCha20Rng::from_seed(key);
+        // XXX(optimization) could expand seed in parallel instead of in series
+        let col_range = Uniform::new(0usize, n_cols);
+        repeat_with(|| col_range.sample(&mut cols_rng))
+            .take(n_col_opens)
+            .collect()
+    };
 
-    // step 2: ifft and check p_eval
+    // step 2: p_eval fft for column checks
+    let p_eval_fft = {
+        let mut tmp = Vec::with_capacity(n_cols);
+        tmp.extend_from_slice(&proof.p_eval[..]);
+        tmp.resize(n_cols, F::zero());
+        <F as FieldFFT>::fft_io(&mut tmp)?;
+        tmp
+    };
 
-    // step 3: extract columns
+    // step 3: check p_random, p_eval, and col paths
+    cols_to_open
+        .par_iter()
+        .zip(&proof.columns[..])
+        .try_for_each(|(&col_num, column)| {
+            let rand = verify_column_value(column, &rand_tensor, &proof.p_random[col_num]);
+            let eval = verify_column_value(column, &outer_tensor, &p_eval_fft[col_num]);
+            let path = verify_column_path(column, col_num, root);
+            match (rand, eval, path) {
+                (true, _, _) => Err(VerifierError::ColumnDegree),
+                (_, true, _) => Err(VerifierError::ColumnEval),
+                (_, _, true) => Err(VerifierError::ColumnPath),
+                _ => Ok(()),
+            }
+        })?;
 
-    // step 4: check column paths
-
-    // step 5: evaluate and return
-    let res = F::zero();
-
-    Ok(res)
+    // step 4: evaluate and return
+    Ok(inner_tensor
+        .par_iter()
+        .zip(&proof.p_eval[..])
+        .fold(F::zero, |a, (t, e)| a + *t * e)
+        .reduce(F::zero, |a, v| a + v))
 }
 
 // Check a column opening
-fn verify_column_path<D, F>(
-    column: &LigeroColumn<D, F>,
-    col_num: usize,
-    root: &Output<D>,
-) -> VerifierResult<()>
+fn verify_column_path<D, F>(column: &LigeroColumn<D, F>, col_num: usize, root: &Output<D>) -> bool
 where
     D: Digest,
     F: FieldFFT + FieldHash,
@@ -514,19 +567,12 @@ where
         hash = digest.finalize_reset();
         col >>= 1;
     }
-    if &hash != root {
-        Err(VerifierError::ColumnPath)
-    } else {
-        Ok(())
-    }
+
+    &hash == root
 }
 
 // check column value
-fn verify_column_value<D, F>(
-    column: &LigeroColumn<D, F>,
-    tensor: &[F],
-    poly_eval: &F,
-) -> VerifierResult<()>
+fn verify_column_value<D, F>(column: &LigeroColumn<D, F>, tensor: &[F], poly_eval: &F) -> bool
 where
     D: Digest,
     F: FieldFFT + FieldHash,
@@ -535,11 +581,8 @@ where
         .iter()
         .zip(&column.col[..])
         .fold(F::zero(), |a, (t, e)| a + *t * e);
-    if poly_eval != &tensor_eval {
-        Err(VerifierError::ColumnValue)
-    } else {
-        Ok(())
-    }
+
+    poly_eval == &tensor_eval
 }
 
 #[cfg(test)]
@@ -550,12 +593,12 @@ fn verify_column<D, F>(
     root: &Output<D>,
     tensor: &[F],
     poly_eval: &F,
-) -> VerifierResult<()>
+) -> bool
 where
     D: Digest,
     F: FieldFFT + FieldHash,
 {
-    verify_column_path(column, col_num, root).and(verify_column_value(column, tensor, poly_eval))
+    verify_column_path(column, col_num, root) && verify_column_value(column, tensor, poly_eval)
 }
 
 /// Evaluate the committed polynomial using the supplied "outer" tensor

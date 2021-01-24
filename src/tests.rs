@@ -112,7 +112,13 @@ fn open_column() {
     for _ in 0..64 {
         let col_num = rng.gen::<usize>() % test_comm.n_cols;
         let column = open_column(&test_comm, col_num).unwrap();
-        assert!(verify_column::<Sha3_256, _>(&column, col_num, &root, &[], &Ft::zero(),).is_ok());
+        assert!(verify_column::<Sha3_256, _>(
+            &column,
+            col_num,
+            &root,
+            &[],
+            &Ft::zero(),
+        ));
     }
 }
 
