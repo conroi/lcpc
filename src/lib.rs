@@ -404,7 +404,10 @@ where
 }
 
 // Open the commitment to one column
-fn open_column<D, F>(comm: &LigeroCommit<D, F>, column: usize) -> ProverResult<LigeroColumn<D, F>>
+fn open_column<D, F>(
+    comm: &LigeroCommit<D, F>,
+    mut column: usize,
+) -> ProverResult<LigeroColumn<D, F>>
 where
     D: Digest,
     F: FieldFFT + FieldHash,
@@ -424,7 +427,6 @@ where
         .collect();
 
     // Merkle path
-    let mut column = column;
     let mut hashes = &comm.hashes[..];
     let path_len = log2(comm.n_cols);
     let mut path = Vec::with_capacity(path_len);
@@ -526,9 +528,9 @@ where
             let eval = verify_column_value(column, &outer_tensor, &p_eval_fft[col_num]);
             let path = verify_column_path(column, col_num, root);
             match (rand, eval, path) {
-                (true, _, _) => Err(VerifierError::ColumnDegree),
-                (_, true, _) => Err(VerifierError::ColumnEval),
-                (_, _, true) => Err(VerifierError::ColumnPath),
+                (false, _, _) => Err(VerifierError::ColumnDegree),
+                (_, false, _) => Err(VerifierError::ColumnEval),
+                (_, _, false) => Err(VerifierError::ColumnPath),
                 _ => Ok(()),
             }
         })?;
@@ -603,7 +605,7 @@ where
 
 /// Evaluate the committed polynomial using the supplied "outer" tensor
 /// and generate a proof of (1) low-degreeness and (2) correct evaluation.
-pub fn eval<D, F>(
+pub fn prove<D, F>(
     comm: &LigeroCommit<D, F>,
     outer_tensor: &[F],
     tr: &mut Transcript,
@@ -627,7 +629,16 @@ where
         let rand_tensor: Vec<F> = repeat_with(|| F::random(&mut deg_test_rng))
             .take(comm.n_rows)
             .collect();
-        eval_outer(comm, &rand_tensor)?
+        let mut tmp = vec![F::zero(); comm.n_cols];
+        collapse_columns(
+            &comm.comm,
+            &rand_tensor,
+            &mut tmp,
+            comm.n_rows,
+            comm.n_cols,
+            0,
+        );
+        tmp
         // XXX(optimization) could compute ifft and send that instead,
         // but that doesn't seem to save much on proof size (col openings dominate)
         // whereas it does increase V's work (another FFT)
@@ -639,10 +650,15 @@ where
 
     // next, evaluate the polynomial using the supplied tensor
     let p_eval = {
-        let mut tmp = eval_outer(comm, outer_tensor)?;
-        <F as FieldFFT>::ifft_oi(&mut tmp)?;
-        assert!(tmp.iter().skip(comm.n_per_row).all(|&v| v == F::zero()));
-        tmp.truncate(comm.n_per_row);
+        let mut tmp = vec![F::zero(); comm.n_per_row];
+        collapse_columns(
+            &comm.coeffs,
+            outer_tensor,
+            &mut tmp,
+            comm.n_rows,
+            comm.n_per_row,
+            0,
+        );
         tmp
     };
     // add p_eval to the transcript
@@ -680,11 +696,18 @@ where
 }
 
 // Evaluate the committed polynomial using the "outer" tensor
+#[cfg(test)]
 fn eval_outer<D, F>(comm: &LigeroCommit<D, F>, tensor: &[F]) -> ProverResult<Vec<F>>
 where
     D: Digest,
     F: FieldFFT + FieldHash,
 {
+    // make sure arguments are well formed
+    check_comm(comm)?;
+    if tensor.len() != comm.n_rows {
+        return Err(ProverError::OuterTensor);
+    }
+
     // allocate result and compute
     let mut poly = vec![F::zero(); comm.n_per_row];
     collapse_columns(
