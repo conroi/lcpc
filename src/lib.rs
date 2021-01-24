@@ -16,10 +16,11 @@ use digest::{Digest, Output};
 use err_derive::Error;
 use fffft::{FFTError, FieldFFT};
 use merlin::Transcript;
-use rand_chacha::{
-    rand_core::{RngCore, SeedableRng},
-    ChaCha20Rng,
+use rand::{
+    distributions::{Distribution, Uniform},
+    SeedableRng,
 };
+use rand_chacha::ChaCha20Rng;
 use rayon::prelude::*;
 use std::iter::repeat_with;
 
@@ -74,6 +75,9 @@ pub type ProverResult<T> = Result<T, ProverError>;
 /// Err variant for verifier operations
 #[derive(Debug, Error)]
 pub enum VerifierError {
+    /// bad rho value
+    #[error(display = "bad rho value --- must be between 0 and 1")]
+    Rho,
     /// wrong number of column openings in proof
     #[error(display = "wrong number of column openings in proof")]
     NumColOpens,
@@ -83,6 +87,12 @@ pub enum VerifierError {
     /// failed to verify column dot product
     #[error(display = "column verification: dot product failed")]
     ColumnValue,
+    /// bad outer tensor
+    #[error(display = "outer tensor: wrong size")]
+    OuterTensor,
+    /// bad inner tensor
+    #[error(display = "inner tensor: wrong size")]
+    InnerTensor,
 }
 
 /// result of a verifier operation
@@ -157,8 +167,8 @@ where
     commit_with_dims(coeffs, rho, n_col_opens, n_rows, n_per_row, n_cols)
 }
 
-/// Commit to a polynomial whose coeffs are `coeffs` using the given rate and dimensions.
-pub fn commit_with_dims<D, F>(
+// Commit to a polynomial whose coeffs are `coeffs` using the given rate and dimensions.
+fn commit_with_dims<D, F>(
     coeffs_in: &[F],
     rho: f64,
     n_col_opens: usize,
@@ -288,7 +298,7 @@ where
     Ok(())
 }
 
-pub(crate) fn check_comm<D, F>(comm: &LigeroCommit<D, F>) -> ProverResult<()>
+fn check_comm<D, F>(comm: &LigeroCommit<D, F>) -> ProverResult<()>
 where
     D: Digest,
     F: FieldFFT + FieldHash,
@@ -387,17 +397,13 @@ where
     }
 }
 
-/// Open the commitment to one column
-pub fn open_column<D, F>(
-    comm: &LigeroCommit<D, F>,
-    column: usize,
-) -> ProverResult<LigeroColumn<D, F>>
+// Open the commitment to one column
+fn open_column<D, F>(comm: &LigeroCommit<D, F>, column: usize) -> ProverResult<LigeroColumn<D, F>>
 where
     D: Digest,
     F: FieldFFT + FieldHash,
 {
     // make sure arguments are well formed
-    check_comm(comm)?;
     if column >= comm.n_cols {
         return Err(ProverError::ColumnNumber);
     }
@@ -433,13 +439,56 @@ fn log2(v: usize) -> usize {
     (63 - (v.next_power_of_two() as u64).leading_zeros()) as usize
 }
 
-/// Check a column opening
-pub fn verify_column<D, F>(
+/// Verify the evaluation of a committed polynomial and return the result
+pub fn verify<D, F>(
+    root: &Output<D>,
+    outer_tensor: &[F],
+    inner_tensor: &[F],
+    proof: &LigeroEvalProof<D, F>,
+    rho: f64,
+    n_col_opens: usize,
+    tr: &mut Transcript,
+) -> VerifierResult<F>
+where
+    D: Digest,
+    F: FieldFFT + FieldHash,
+{
+    // make sure arguments are well formed
+    if n_col_opens != proof.columns.len() || n_col_opens == 0 {
+        return Err(VerifierError::NumColOpens);
+    }
+    let n_rows = proof.columns[0].col.len();
+    let n_cols = proof.p_random.len();
+    let n_per_row = proof.p_eval.len();
+    if inner_tensor.len() != n_per_row {
+        return Err(VerifierError::InnerTensor);
+    }
+    if outer_tensor.len() != n_rows {
+        return Err(VerifierError::OuterTensor);
+    }
+    if rho <= 0f64 || rho >= 1f64 || n_cols as f64 * rho < n_per_row as f64 {
+        return Err(VerifierError::Rho);
+    }
+
+    // step 1: check p_random
+
+    // step 2: ifft and check p_eval
+
+    // step 3: extract columns
+
+    // step 4: check column paths
+
+    // step 5: evaluate and return
+    let res = F::zero();
+
+    Ok(res)
+}
+
+// Check a column opening
+fn verify_column_path<D, F>(
     column: &LigeroColumn<D, F>,
     col_num: usize,
     root: &Output<D>,
-    tensor: &[F],
-    poly_eval: &F,
 ) -> VerifierResult<()>
 where
     D: Digest,
@@ -466,35 +515,88 @@ where
         col >>= 1;
     }
     if &hash != root {
-        return Err(VerifierError::ColumnPath);
+        Err(VerifierError::ColumnPath)
+    } else {
+        Ok(())
     }
+}
 
-    // root of unity for this column (bit reverse because fft is out-of-order)
+// check column value
+fn verify_column_value<D, F>(
+    column: &LigeroColumn<D, F>,
+    tensor: &[F],
+    poly_eval: &F,
+) -> VerifierResult<()>
+where
+    D: Digest,
+    F: FieldFFT + FieldHash,
+{
     let tensor_eval = tensor
         .iter()
         .zip(&column.col[..])
         .fold(F::zero(), |a, (t, e)| a + *t * e);
     if poly_eval != &tensor_eval {
-        return Err(VerifierError::ColumnValue);
+        Err(VerifierError::ColumnValue)
+    } else {
+        Ok(())
     }
+}
 
-    Ok(())
+#[cfg(test)]
+// Check a column opening
+fn verify_column<D, F>(
+    column: &LigeroColumn<D, F>,
+    col_num: usize,
+    root: &Output<D>,
+    tensor: &[F],
+    poly_eval: &F,
+) -> VerifierResult<()>
+where
+    D: Digest,
+    F: FieldFFT + FieldHash,
+{
+    verify_column_path(column, col_num, root).and(verify_column_value(column, tensor, poly_eval))
 }
 
 /// Evaluate the committed polynomial using the supplied "outer" tensor
 /// and generate a proof of (1) low-degreeness and (2) correct evaluation.
 pub fn eval<D, F>(
     comm: &LigeroCommit<D, F>,
-    tensor: &[F],
+    outer_tensor: &[F],
     tr: &mut Transcript,
 ) -> ProverResult<LigeroEvalProof<D, F>>
 where
     D: Digest,
     F: FieldFFT + FieldHash,
 {
-    // first, evaluate the polynomial using the supplied tensor
+    // make sure arguments are well formed
+    check_comm(comm)?;
+    if outer_tensor.len() != comm.n_rows {
+        return Err(ProverError::OuterTensor);
+    }
+
+    // first, evaluate the polynomial on a random tensor (degree test)
+    let p_random = {
+        let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
+        tr.challenge_bytes(b"ligero-pc//eval//degree_test", &mut key);
+        let mut deg_test_rng = ChaCha20Rng::from_seed(key);
+        // XXX(optimization) could expand seed in parallel instead of in series
+        let rand_tensor: Vec<F> = repeat_with(|| F::random(&mut deg_test_rng))
+            .take(comm.n_rows)
+            .collect();
+        eval_outer(comm, &rand_tensor)?
+        // XXX(optimization) could compute ifft and send that instead,
+        // but that doesn't seem to save much on proof size (col openings dominate)
+        // whereas it does increase V's work (another FFT)
+    };
+    // add p_random to the transcript
+    p_random
+        .iter()
+        .for_each(|coeff| coeff.transcript_update(tr, b"ligero-pc//eval//p_random"));
+
+    // next, evaluate the polynomial using the supplied tensor
     let p_eval = {
-        let mut tmp = eval_outer(comm, tensor)?;
+        let mut tmp = eval_outer(comm, outer_tensor)?;
         <F as FieldFFT>::ifft_oi(&mut tmp)?;
         assert!(tmp.iter().skip(comm.n_per_row).all(|&v| v == F::zero()));
         tmp.truncate(comm.n_per_row);
@@ -505,25 +607,6 @@ where
         .iter()
         .for_each(|coeff| coeff.transcript_update(tr, b"ligero-pc//eval//p_eval"));
 
-    // next, evaluate the polynomial on a random tensor (degree test)
-    let p_random = {
-        let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
-        tr.challenge_bytes(b"ligero-pc//eval//degree_test", &mut key);
-        let mut deg_test_rng = ChaCha20Rng::from_seed(key);
-        let rand_tensor: Vec<F> = repeat_with(|| F::random(&mut deg_test_rng))
-            .take(comm.n_rows)
-            .collect();
-        let mut tmp = eval_outer(comm, &rand_tensor)?;
-        <F as FieldFFT>::ifft_oi(&mut tmp)?;
-        assert!(tmp.iter().skip(comm.n_per_row).all(|&v| v == F::zero()));
-        tmp.truncate(comm.n_per_row);
-        tmp
-    };
-    // add p_random to the transcript
-    p_random
-        .iter()
-        .for_each(|coeff| coeff.transcript_update(tr, b"ligero-pc//eval//p_random"));
-
     // now extract the column numbers to open
     // XXX(F-S) should we do this column-by-column, updating the transcript for each???
     //          It doesn't seem necessary to me...
@@ -531,8 +614,14 @@ where
         let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
         tr.challenge_bytes(b"ligero-pc//eval//cols_to_open", &mut key);
         let mut cols_rng = ChaCha20Rng::from_seed(key);
-        repeat_with(|| open_column(comm, cols_rng.next_u64() as usize))
+        // XXX(optimization) could expand seed in parallel instead of in series
+        let col_range = Uniform::new(0usize, comm.n_cols);
+        let cols_to_open: Vec<usize> = repeat_with(|| col_range.sample(&mut cols_rng))
             .take(comm.n_col_opens)
+            .collect();
+        cols_to_open
+            .par_iter()
+            .map(|&col| open_column(comm, col))
             .collect::<ProverResult<Vec<LigeroColumn<D, F>>>>()?
     };
     // add columns to the transcript
@@ -547,18 +636,12 @@ where
     })
 }
 
-/// Evaluate the committed polynomial using the "outer" tensor
-pub fn eval_outer<D, F>(comm: &LigeroCommit<D, F>, tensor: &[F]) -> ProverResult<Vec<F>>
+// Evaluate the committed polynomial using the "outer" tensor
+fn eval_outer<D, F>(comm: &LigeroCommit<D, F>, tensor: &[F]) -> ProverResult<Vec<F>>
 where
     D: Digest,
     F: FieldFFT + FieldHash,
 {
-    // make sure arguments are well formed
-    check_comm(comm)?;
-    if tensor.len() != comm.n_rows {
-        return Err(ProverError::OuterTensor);
-    }
-
     // allocate result and compute
     let mut poly = vec![F::zero(); comm.n_per_row];
     collapse_columns(
