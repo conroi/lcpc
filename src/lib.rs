@@ -105,7 +105,7 @@ pub enum VerifierError {
 pub type VerifierResult<T> = Result<T, VerifierError>;
 
 /// a commitment
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct LigeroCommit<D, F>
 where
     D: Digest,
@@ -133,7 +133,7 @@ where
 }
 
 /// A column opening and the corresponding Merkle path.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct LigeroColumn<D, F>
 where
     D: Digest,
@@ -160,7 +160,7 @@ where
 }
 
 /// An evaluation and proof of its correctness and of the low-degreeness of the commitment.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct LigeroEvalProof<D, F>
 where
     D: Digest,
