@@ -130,7 +130,7 @@ fn commit() {
     use super::{commit, eval_outer, eval_outer_fft};
 
     let (coeffs, rho) = random_coeffs_rho();
-    let comm = commit::<Sha3_256, _>(&coeffs, rho, 128usize).unwrap();
+    let comm = commit::<Sha3_256, _>(&coeffs, rho, 1usize, 128usize).unwrap();
 
     let x = Ft::random(&mut rand::thread_rng());
 
@@ -173,8 +173,9 @@ fn end_to_end() {
 
     // commit to a random polynomial at a random rate
     let (coeffs, rho) = random_coeffs_rho();
+    let n_degree_tests = 2;
     let n_col_opens = 128usize;
-    let comm = commit::<Sha3_256, _>(&coeffs, rho, n_col_opens).unwrap();
+    let comm = commit::<Sha3_256, _>(&coeffs, rho, n_degree_tests, n_col_opens).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root().unwrap();
 
@@ -216,6 +217,7 @@ fn end_to_end() {
         &inner_tensor[..],
         &pf,
         rho,
+        n_degree_tests,
         n_col_opens,
         &mut tr2,
     )
@@ -230,8 +232,9 @@ fn end_to_end_two_proofs() {
 
     // commit to a random polynomial at a random rate
     let (coeffs, rho) = random_coeffs_rho();
+    let n_degree_tests = 1;
     let n_col_opens = 128usize;
-    let comm = commit::<Sha3_256, _>(&coeffs, rho, n_col_opens).unwrap();
+    let comm = commit::<Sha3_256, _>(&coeffs, rho, n_degree_tests, n_col_opens).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root().unwrap();
 
@@ -286,6 +289,7 @@ fn end_to_end_two_proofs() {
         &inner_tensor[..],
         &pf,
         rho,
+        n_degree_tests,
         n_col_opens,
         &mut tr2,
     )
@@ -313,6 +317,7 @@ fn end_to_end_two_proofs() {
         &inner_tensor[..],
         &pf2,
         rho,
+        n_degree_tests,
         n_col_opens,
         &mut tr2,
     )
@@ -363,6 +368,7 @@ fn random_comm() -> LigeroCommit<Sha3_256, Ft> {
         comm,
         coeffs,
         rho,
+        n_degree_tests: 1usize,
         n_col_opens: 128usize,
         n_rows,
         n_cols,

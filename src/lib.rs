@@ -115,6 +115,7 @@ where
     coeffs: Vec<F>,
     rho: f64,
     n_col_opens: usize,
+    n_degree_tests: usize,
     n_rows: usize,
     n_cols: usize,
     n_per_row: usize,
@@ -167,7 +168,7 @@ where
     F: FieldFFT + FieldHash,
 {
     p_eval: Vec<F>,
-    p_random: Vec<F>,
+    p_random_vec: Vec<Vec<F>>,
     columns: Vec<LigeroColumn<D, F>>,
 }
 
@@ -175,19 +176,33 @@ where
 const LOG_MIN_NCOLS: usize = 5;
 
 /// Commit to a univariate polynomial whose coefficients are `coeffs` using Reed-Solomon rate `0 < rho < 1`.
-pub fn commit<D, F>(coeffs: &[F], rho: f64, n_col_opens: usize) -> ProverResult<LigeroCommit<D, F>>
+pub fn commit<D, F>(
+    coeffs: &[F],
+    rho: f64,
+    n_degree_tests: usize,
+    n_col_opens: usize,
+) -> ProverResult<LigeroCommit<D, F>>
 where
     D: Digest,
     F: FieldFFT + FieldHash,
 {
     let (n_rows, n_per_row, n_cols) = get_dims(coeffs.len(), rho)?;
-    commit_with_dims(coeffs, rho, n_col_opens, n_rows, n_per_row, n_cols)
+    commit_with_dims(
+        coeffs,
+        rho,
+        n_degree_tests,
+        n_col_opens,
+        n_rows,
+        n_per_row,
+        n_cols,
+    )
 }
 
 /// Commit to a polynomial whose coeffs are `coeffs_in` using the given rate and dimensions.
 pub fn commit_with_dims<D, F>(
     coeffs_in: &[F],
     rho: f64,
+    n_degree_tests: usize,
     n_col_opens: usize,
     n_rows: usize,
     n_per_row: usize,
@@ -229,6 +244,7 @@ where
         comm,
         coeffs,
         rho,
+        n_degree_tests,
         n_col_opens,
         n_rows,
         n_cols,
@@ -465,6 +481,7 @@ pub fn verify<D, F>(
     inner_tensor: &[F],
     proof: &LigeroEvalProof<D, F>,
     rho: f64,
+    n_degree_tests: usize,
     n_col_opens: usize,
     tr: &mut Transcript,
 ) -> VerifierResult<F>
@@ -477,7 +494,7 @@ where
         return Err(VerifierError::NumColOpens);
     }
     let n_rows = proof.columns[0].col.len();
-    let n_cols = proof.p_random.len();
+    let n_cols = proof.p_random_vec[0].len();
     let n_per_row = proof.p_eval.len();
     if inner_tensor.len() != n_per_row {
         return Err(VerifierError::InnerTensor);
@@ -491,24 +508,32 @@ where
 
     // step 1: random tensor for degree test and random columns to test
     // step 1a: extract random tensor from transcript
-    let rand_tensor: Vec<F> = {
-        let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
-        tr.challenge_bytes(b"ligero-pc//eval//degree_test", &mut key);
-        let mut deg_test_rng = ChaCha20Rng::from_seed(key);
-        // XXX(optimization) could expand seed in parallel instead of in series
-        repeat_with(|| F::random(&mut deg_test_rng))
-            .take(n_rows)
-            .collect()
-    };
-    // step 1b: push p_random and p_eval into transcript
-    proof
-        .p_random
-        .iter()
-        .for_each(|coeff| coeff.transcript_update(tr, b"ligero-pc//eval//p_random"));
+    // we run multiple instances of this to boost soundness
+    let mut rand_tensor_vec: Vec<Vec<F>> = Vec::new();
+    for i in 0..n_degree_tests {
+        let rand_tensor: Vec<F> = {
+            let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
+            tr.challenge_bytes(b"ligero-pc//eval//degree_test", &mut key);
+            let mut deg_test_rng = ChaCha20Rng::from_seed(key);
+            // XXX(optimization) could expand seed in parallel instead of in series
+            repeat_with(|| F::random(&mut deg_test_rng))
+                .take(n_rows)
+                .collect()
+        };
+
+        rand_tensor_vec.push(rand_tensor);
+
+        // step 1b: push p_random and p_eval into transcript
+        proof.p_random_vec[i]
+            .iter()
+            .for_each(|coeff| coeff.transcript_update(tr, b"ligero-pc//eval//p_random"));
+    }
+
     proof
         .p_eval
         .iter()
         .for_each(|coeff| coeff.transcript_update(tr, b"ligero-pc//eval//p_eval"));
+
     // step 1c: extract columns to open
     let cols_to_open: Vec<usize> = {
         let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
@@ -535,7 +560,19 @@ where
         .par_iter()
         .zip(&proof.columns[..])
         .try_for_each(|(&col_num, column)| {
-            let rand = verify_column_value(column, &rand_tensor, &proof.p_random[col_num]);
+            let rand = {
+                let mut rand = true;
+                for i in 0..n_degree_tests {
+                    rand = rand
+                        & verify_column_value(
+                            column,
+                            &rand_tensor_vec[i],
+                            &proof.p_random_vec[i][col_num],
+                        );
+                }
+                rand
+            };
+
             let eval = verify_column_value(column, &outer_tensor, &p_eval_fft[col_num]);
             let path = verify_column_path(column, col_num, root);
             match (rand, eval, path) {
@@ -632,32 +669,38 @@ where
     }
 
     // first, evaluate the polynomial on a random tensor (degree test)
-    let p_random = {
-        let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
-        tr.challenge_bytes(b"ligero-pc//eval//degree_test", &mut key);
-        let mut deg_test_rng = ChaCha20Rng::from_seed(key);
-        // XXX(optimization) could expand seed in parallel instead of in series
-        let rand_tensor: Vec<F> = repeat_with(|| F::random(&mut deg_test_rng))
-            .take(comm.n_rows)
-            .collect();
-        let mut tmp = vec![F::zero(); comm.n_cols];
-        collapse_columns(
-            &comm.comm,
-            &rand_tensor,
-            &mut tmp,
-            comm.n_rows,
-            comm.n_cols,
-            0,
-        );
-        tmp
-        // XXX(optimization) could compute ifft and send that instead,
-        // but that doesn't seem to save much on proof size (col openings dominate)
-        // whereas it does increase V's work (another FFT)
-    };
-    // add p_random to the transcript
-    p_random
-        .iter()
-        .for_each(|coeff| coeff.transcript_update(tr, b"ligero-pc//eval//p_random"));
+    // we repeat this to boost soundness
+    let mut p_random_vec: Vec<Vec<F>> = Vec::new();
+    for _i in 0..comm.n_degree_tests {
+        let p_random = {
+            let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
+            tr.challenge_bytes(b"ligero-pc//eval//degree_test", &mut key);
+            let mut deg_test_rng = ChaCha20Rng::from_seed(key);
+            // XXX(optimization) could expand seed in parallel instead of in series
+            let rand_tensor: Vec<F> = repeat_with(|| F::random(&mut deg_test_rng))
+                .take(comm.n_rows)
+                .collect();
+            let mut tmp = vec![F::zero(); comm.n_cols];
+            collapse_columns(
+                &comm.comm,
+                &rand_tensor,
+                &mut tmp,
+                comm.n_rows,
+                comm.n_cols,
+                0,
+            );
+            tmp
+            // XXX(optimization) could compute ifft and send that instead,
+            // but that doesn't seem to save much on proof size (col openings dominate)
+            // whereas it does increase V's work (another FFT)
+        };
+        // add p_random to the transcript
+        p_random
+            .iter()
+            .for_each(|coeff| coeff.transcript_update(tr, b"ligero-pc//eval//p_random"));
+
+        p_random_vec.push(p_random);
+    }
 
     // next, evaluate the polynomial using the supplied tensor
     let p_eval = {
@@ -695,13 +738,13 @@ where
             .collect::<ProverResult<Vec<LigeroColumn<D, F>>>>()?
     };
     // add columns to the transcript
-    columns
-        .iter()
-        .for_each(|col| col.transcript_update(tr, b"ligero-pc//eval//columns"));
+    //columns
+    //    .iter()
+    //    .for_each(|col| col.transcript_update(tr, b"ligero-pc//eval//columns"));
 
     Ok(LigeroEvalProof {
         p_eval,
-        p_random,
+        p_random_vec,
         columns,
     })
 }
