@@ -17,6 +17,9 @@ merlin = "2.0"
 rand = "0.8"
 rand_chacha = "0.3"
 rayon = "1.4"
+serde = { version = "1.0.106", features = ["derive"] }
+flate2 = "*"
+bincode = "*"
 
 [dev-dependencies]
 bitvec = "0.20"

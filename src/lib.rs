@@ -22,7 +22,35 @@ use rand::{
 };
 use rand_chacha::ChaCha20Rng;
 use rayon::prelude::*;
+use serde::{Serialize, Serializer};
 use std::iter::repeat_with;
+
+/// A type to wrap Output<D>
+#[derive(Debug, Clone)]
+pub struct WrappedOutput<D>
+where
+    D: Digest,
+{
+    /// wrapped output
+    pub output: Output<D>,
+}
+
+impl<D> Serialize for WrappedOutput<D>
+where
+    D: Digest,
+{   
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        use serde::ser::SerializeTuple;
+        let mut tup = serializer.serialize_tuple(<D as Digest>::output_size())?;
+        for byte in self.output.as_ref().iter() {
+            tup.serialize_element(byte)?;
+        }
+        tup.end()
+    }
+}
 
 #[cfg(test)]
 mod tests;
@@ -144,6 +172,17 @@ where
     path: Vec<Output<D>>,
 }
 
+/// A column opening and the corresponding Merkle path.
+#[derive(Debug, Clone, Serialize)]
+pub struct WrappedLigeroColumn<D, F>
+where
+    D: Digest,
+    F: FieldFFT + FieldHash,
+{
+    col: Vec<F>,
+    path: Vec<WrappedOutput<D>>,
+}
+
 // used locally to hash columns into the transcript
 impl<D, F> LigeroColumn<D, F>
 where
@@ -158,6 +197,37 @@ where
             .iter()
             .for_each(|path_ent| t.append_message(l, path_ent.as_ref()));
     }
+
+    fn wrapped(&self) -> WrappedLigeroColumn<D, F> {
+        let path_wrapped = (0..self.path.len())
+            .map(|i| WrappedOutput {
+                output: self.path[i].clone(),
+            })
+            .collect();
+        
+        WrappedLigeroColumn {
+            col: self.col.clone(),
+            path: path_wrapped,
+        }
+    }
+}
+
+impl<D, F> WrappedLigeroColumn<D, F>
+where
+    D: Digest,
+    F: FieldFFT + FieldHash,
+{
+    /// unwrap column
+    pub fn unwrapped(&self) -> LigeroColumn<D, F> {
+        let path_unwrapped = (0..self.path.len())
+            .map(|i| self.path[i].output.clone())
+            .collect();
+        
+        LigeroColumn {
+            col: self.col.clone(),
+            path: path_unwrapped,
+        }
+    }
 }
 
 /// An evaluation and proof of its correctness and of the low-degreeness of the commitment.
@@ -171,6 +241,59 @@ where
     p_random_vec: Vec<Vec<F>>,
     columns: Vec<LigeroColumn<D, F>>,
 }
+
+/// An evaluation and proof of its correctness and of the low-degreeness of the commitment.
+#[derive(Debug, Clone, Serialize)]
+pub struct WrappedLigeroEvalProof<D, F>
+where
+    D: Digest,
+    F: FieldFFT + FieldHash,
+{
+    p_eval: Vec<F>,
+    p_random_vec: Vec<Vec<F>>,
+    columns: Vec<WrappedLigeroColumn<D, F>>,
+}
+
+// used locally to hash columns into the transcript
+impl<D, F> LigeroEvalProof<D, F>
+where
+    D: Digest,
+    F: FieldFFT + FieldHash,
+{
+    /// wrapped method
+    pub fn wrapped(&self) -> WrappedLigeroEvalProof<D, F> {
+       let columns_wrapped = (0..self.columns.len())
+            .map(|i| self.columns[i].wrapped())
+            .collect();
+        
+            WrappedLigeroEvalProof {
+            p_eval: self.p_eval.clone(),
+            p_random_vec: self.p_random_vec.clone(),
+            columns: columns_wrapped,
+        }
+    }
+}
+
+// used locally to hash columns into the transcript
+impl<D, F> WrappedLigeroEvalProof<D, F>
+where
+    D: Digest,
+    F: FieldFFT + FieldHash,
+{
+    /// unwrapped method
+    pub fn unwrapped(&self) -> LigeroEvalProof<D, F> {
+       let columns_unwrapped = (0..self.columns.len())
+            .map(|i| self.columns[i].unwrapped())
+            .collect();
+        
+            LigeroEvalProof {
+                p_eval: self.p_eval.clone(),
+                p_random_vec: self.p_random_vec.clone(),
+                columns: columns_unwrapped,
+        }
+    }
+}
+
 
 // parallelization limit when working on columns
 const LOG_MIN_NCOLS: usize = 5;
