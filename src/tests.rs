@@ -12,6 +12,7 @@ use super::LigeroCommit;
 use digest::Output;
 use ff::Field;
 use fffft::FieldFFT;
+use flate2::{write::ZlibEncoder, Compression};
 use ft::*;
 use itertools::iterate;
 use merlin::Transcript;
@@ -20,12 +21,11 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use sha3::Sha3_256;
 use std::iter::repeat_with;
-use flate2::{write::ZlibEncoder, Compression};
 
 mod ft {
     use crate::FieldHash;
     use ff::PrimeField;
-    use serde::{Serialize};
+    use serde::Serialize;
 
     #[derive(PrimeField, Serialize)]
     #[PrimeFieldModulus = "70386805592835581672624750593"]
@@ -208,11 +208,6 @@ fn end_to_end() {
     tr1.append_message(b"rate", &rho.to_be_bytes()[..]);
     tr1.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
     let pf = prove::<Sha3_256, _>(&comm, &outer_tensor[..], &mut tr1).unwrap();
-
-    let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
-    bincode::serialize_into(&mut encoder, &pf.wrapped()).unwrap();
-    let proof_encoded = encoder.finish().unwrap();
-    println!("proof_compressed_len {:?}", proof_encoded.len());
 
     // verify it and finish evaluation
     let mut tr2 = Transcript::new(b"test transcript");
