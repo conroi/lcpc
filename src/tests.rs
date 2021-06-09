@@ -12,7 +12,6 @@ use super::LigeroCommit;
 use digest::Output;
 use ff::Field;
 use fffft::FieldFFT;
-use flate2::{write::ZlibEncoder, Compression};
 use ft::*;
 use itertools::iterate;
 use merlin::Transcript;

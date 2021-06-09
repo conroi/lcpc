@@ -186,6 +186,8 @@ where
     D: Digest,
     F: FieldFFT + FieldHash,
 {
+    /*
+     * XXX(rsw) unused for now
     fn transcript_update(&self, t: &mut Transcript, l: &'static [u8]) {
         self.col
             .iter()
@@ -194,6 +196,7 @@ where
             .iter()
             .for_each(|path_ent| t.append_message(l, path_ent.as_ref()));
     }
+    */
 
     fn wrapped(&self) -> WrappedLigeroColumn<F> {
         let path_wrapped = (0..self.path.len())
@@ -855,10 +858,13 @@ where
             .map(|&col| open_column(comm, col))
             .collect::<ProverResult<Vec<LigeroColumn<D, F>>>>()?
     };
+    /*
+     * XXX(rsw) unused for now
     // add columns to the transcript
-    //columns
-    //    .iter()
-    //    .for_each(|col| col.transcript_update(tr, b"ligero-pc//eval//columns"));
+    columns
+        .iter()
+        .for_each(|col| col.transcript_update(tr, b"ligero-pc//eval//columns"));
+    */
 
     Ok(LigeroEvalProof {
         p_eval,
