@@ -64,6 +64,7 @@ pub enum ProverError {
     #[error(display = "size is too big (n_cols overflowed). increase rho?")]
     TooBig,
     /// error computing FFT
+    #[allow(clippy::upper_case_acronyms)]
     #[error(display = "fft error: {:?}", _0)]
     FFT(#[source] FFTError),
     /// inconsistent LigeroCommit fields
@@ -105,6 +106,7 @@ pub enum VerifierError {
     #[error(display = "inner tensor: wrong size")]
     InnerTensor,
     /// error computing FFT
+    #[allow(clippy::upper_case_acronyms)]
     #[error(display = "fft error: {:?}", _0)]
     FFT(#[source] FFTError),
 }
@@ -207,6 +209,7 @@ where
     D: Digest,
     F: FieldFFT + FieldHash,
 {
+    n_cols: usize,
     p_eval: Vec<F>,
     p_random_vec: Vec<Vec<F>>,
     columns: Vec<LigeroColumn<D, F>>,
@@ -218,6 +221,7 @@ pub struct WrappedLigeroEvalProof<F>
 where
     F: FieldFFT + FieldHash,
 {
+    n_cols: usize,
     p_eval: Vec<F>,
     p_random_vec: Vec<Vec<F>>,
     columns: Vec<WrappedLigeroColumn<F>>,
@@ -236,6 +240,7 @@ where
             .collect();
 
         WrappedLigeroEvalProof {
+            n_cols: self.n_cols,
             p_eval: self.p_eval.clone(),
             p_random_vec: self.p_random_vec.clone(),
             columns: columns_wrapped,
@@ -256,6 +261,7 @@ where
             .collect();
 
         LigeroEvalProof {
+            n_cols: inp.n_cols,
             p_eval: inp.p_eval.clone(),
             p_random_vec: inp.p_random_vec.clone(),
             columns: columns_unwrapped,
@@ -492,7 +498,7 @@ where
     merkle_layer::<D>(ins, outs);
 
     if !rems.is_empty() {
-        return merkle_tree::<D>(outs, rems);
+        merkle_tree::<D>(outs, rems)
     }
 }
 
@@ -566,6 +572,7 @@ fn log2(v: usize) -> usize {
 }
 
 /// Verify the evaluation of a committed polynomial and return the result
+#[allow(clippy::too_many_arguments)]
 pub fn verify<D, F>(
     root: &Output<D>,
     outer_tensor: &[F],
@@ -585,7 +592,7 @@ where
         return Err(VerifierError::NumColOpens);
     }
     let n_rows = proof.columns[0].col.len();
-    let n_cols = proof.p_random_vec[0].len();
+    let n_cols = proof.n_cols;
     let n_per_row = proof.p_eval.len();
     if inner_tensor.len() != n_per_row {
         return Err(VerifierError::InnerTensor);
@@ -601,6 +608,7 @@ where
     // step 1a: extract random tensor from transcript
     // we run multiple instances of this to boost soundness
     let mut rand_tensor_vec: Vec<Vec<F>> = Vec::new();
+    let mut p_random_fft: Vec<Vec<F>> = Vec::new();
     for i in 0..n_degree_tests {
         let rand_tensor: Vec<F> = {
             let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
@@ -614,7 +622,16 @@ where
 
         rand_tensor_vec.push(rand_tensor);
 
-        // step 1b: push p_random and p_eval into transcript
+        // step 1b: eval FFT of p_random
+        {
+            let mut tmp = Vec::with_capacity(n_cols);
+            tmp.extend_from_slice(&proof.p_random_vec[i][..]);
+            tmp.resize(n_cols, F::zero());
+            <F as FieldFFT>::fft_io(&mut tmp)?;
+            p_random_fft.push(tmp);
+        };
+
+        // step 1c: push p_random and p_eval into transcript
         proof.p_random_vec[i]
             .iter()
             .for_each(|coeff| coeff.transcript_update(tr, b"ligero-pc//eval//p_random"));
@@ -625,7 +642,7 @@ where
         .iter()
         .for_each(|coeff| coeff.transcript_update(tr, b"ligero-pc//eval//p_eval"));
 
-    // step 1c: extract columns to open
+    // step 1d: extract columns to open
     let cols_to_open: Vec<usize> = {
         let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
         tr.challenge_bytes(b"ligero-pc//eval//cols_to_open", &mut key);
@@ -654,12 +671,8 @@ where
             let rand = {
                 let mut rand = true;
                 for i in 0..n_degree_tests {
-                    rand = rand
-                        & verify_column_value(
-                            column,
-                            &rand_tensor_vec[i],
-                            &proof.p_random_vec[i][col_num],
-                        );
+                    rand &=
+                        verify_column_value(column, &rand_tensor_vec[i], &p_random_fft[i][col_num]);
                 }
                 rand
             };
@@ -759,7 +772,7 @@ where
         return Err(ProverError::OuterTensor);
     }
 
-    // first, evaluate the polynomial on a random tensor (degree test)
+    // first, evaluate the polynomial on a random tensor (low-degree test)
     // we repeat this to boost soundness
     let mut p_random_vec: Vec<Vec<F>> = Vec::new();
     for _i in 0..comm.n_degree_tests {
@@ -771,19 +784,16 @@ where
             let rand_tensor: Vec<F> = repeat_with(|| F::random(&mut deg_test_rng))
                 .take(comm.n_rows)
                 .collect();
-            let mut tmp = vec![F::zero(); comm.n_cols];
+            let mut tmp = vec![F::zero(); comm.n_per_row];
             collapse_columns(
-                &comm.comm,
+                &comm.coeffs,
                 &rand_tensor,
                 &mut tmp,
                 comm.n_rows,
-                comm.n_cols,
+                comm.n_per_row,
                 0,
             );
             tmp
-            // XXX(optimization) could compute ifft and send that instead,
-            // but that doesn't seem to save much on proof size (col openings dominate)
-            // whereas it does increase V's work (another FFT)
         };
         // add p_random to the transcript
         p_random
@@ -830,6 +840,7 @@ where
     };
 
     Ok(LigeroEvalProof {
+        n_cols: comm.n_cols,
         p_eval,
         p_random_vec,
         columns,
