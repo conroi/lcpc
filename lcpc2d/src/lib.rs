@@ -1,6 +1,6 @@
-// Copyright 2020 Riad S. Wahby <rsw@cs.stanford.edu>
+// Copyright 2021 Riad S. Wahby <rsw@cs.stanford.edu>
 //
-// This file is part of ligero-pc.
+// This file is part of lcpc2d.
 //
 // Licensed under the Apache License, Version 2.0 (see
 // LICENSE or https://www.apache.org/licenses/LICENSE-2.0).
@@ -9,7 +9,7 @@
 #![deny(missing_docs)]
 
 /*!
-ligero-pc is a polynomial commitment scheme based on Ligero
+lcpc2d is a polynomial commitment scheme based on linear codes
 */
 
 use digest::{Digest, Output};
@@ -31,24 +31,6 @@ pub struct WrappedOutput {
     /// wrapped output
     pub bytes: Vec<u8>,
 }
-
-/*
-impl<D> Serialize for WrappedOutput<D>
-where
-    D: Digest,
-{
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        use serde::ser::SerializeTuple;
-        let mut tup = serializer.serialize_tuple(<D as Digest>::output_size())?;
-        for byte in self.output.as_ref().iter() {
-            tup.serialize_element(byte)?;
-        }
-        tup.end()
-    }
-}*/
 
 #[cfg(test)]
 mod tests;
@@ -186,18 +168,6 @@ where
     D: Digest,
     F: FieldFFT + FieldHash,
 {
-    /*
-     * XXX(rsw) unused for now
-    fn transcript_update(&self, t: &mut Transcript, l: &'static [u8]) {
-        self.col
-            .iter()
-            .for_each(|col_ent| t.append_message(l, col_ent.to_hash_repr().as_ref()));
-        self.path
-            .iter()
-            .for_each(|path_ent| t.append_message(l, path_ent.as_ref()));
-    }
-    */
-
     fn wrapped(&self) -> WrappedLigeroColumn<F> {
         let path_wrapped = (0..self.path.len())
             .map(|i| WrappedOutput {
@@ -858,13 +828,6 @@ where
             .map(|&col| open_column(comm, col))
             .collect::<ProverResult<Vec<LigeroColumn<D, F>>>>()?
     };
-    /*
-     * XXX(rsw) unused for now
-    // add columns to the transcript
-    columns
-        .iter()
-        .for_each(|col| col.transcript_update(tr, b"ligero-pc//eval//columns"));
-    */
 
     Ok(LigeroEvalProof {
         p_eval,
