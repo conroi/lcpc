@@ -12,6 +12,7 @@ repository = "https://github.com/kwantam/lcpc"
 [dependencies]
 err-derive = "0.2"
 digest = "0.9"
+ff = "0.9"
 fffft = "0.2"
 merlin = "2.0"
 rand = "0.8"

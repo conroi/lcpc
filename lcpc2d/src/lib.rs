@@ -14,6 +14,7 @@ lcpc2d is a polynomial commitment scheme based on linear codes
 
 use digest::{Digest, Output};
 use err_derive::Error;
+use ff::Field;
 use fffft::{FFTError, FieldFFT};
 use merlin::Transcript;
 use rand::{
@@ -54,20 +55,56 @@ pub trait FieldHash {
     }
 }
 
+/// Trait for a linear encoding used by the polycommit
+pub trait LcEncoding: Clone + std::fmt::Debug + serde::Serialize {
+    /// Field over which coefficients are defined
+    type F: Field + FieldHash + std::fmt::Debug + Clone + serde::Serialize;
+
+    /// Error type for encoding
+    type Err: std::fmt::Debug + std::error::Error + Send;
+
+    /// Encoding function
+    fn encode<T: AsMut<[Self::F]>>(inp: T) -> Result<(), Self::Err>;
+}
+
+// local accessors for enclosed types
+type FldT<E> = <E as LcEncoding>::F;
+type ErrT<E> = <E as LcEncoding>::Err;
+
+/// Ligero encoding type
+#[derive(Clone, Debug, Serialize)]
+pub struct LigeroEncoding<Ft> {
+    _p: std::marker::PhantomData<Ft>,
+}
+
+impl<Ft> LcEncoding for LigeroEncoding<Ft>
+where
+    Ft: FieldFFT + FieldHash + serde::Serialize,
+{
+    type F = Ft;
+    type Err = FFTError;
+
+    fn encode<T: AsMut<[Ft]>>(inp: T) -> Result<(), FFTError> {
+        <Ft as FieldFFT>::fft_io(inp)
+    }
+}
+
 /// Err variant for prover operations
 #[derive(Debug, Error)]
-pub enum ProverError {
+pub enum ProverError<ErrT>
+where
+    ErrT: std::fmt::Debug + std::error::Error + 'static,
+{
     /// bad rho value
     #[error(display = "bad rho value --- must be between 0 and 1")]
     Rho,
     /// size too big
     #[error(display = "size is too big (n_cols overflowed). increase rho?")]
     TooBig,
-    /// error computing FFT
-    #[allow(clippy::upper_case_acronyms)]
-    #[error(display = "fft error: {:?}", _0)]
-    FFT(#[source] FFTError),
-    /// inconsistent LigeroCommit fields
+    /// error encoding a vector
+    #[error(display = "encoding error: {:?}", _0)]
+    Encode(#[source] ErrT),
+    /// inconsistent LcCommit fields
     #[error(display = "inconsistent commitment fields")]
     Commit,
     /// bad column number
@@ -79,11 +116,14 @@ pub enum ProverError {
 }
 
 /// result of a prover operation
-pub type ProverResult<T> = Result<T, ProverError>;
+pub type ProverResult<T, ErrT> = Result<T, ProverError<ErrT>>;
 
 /// Err variant for verifier operations
 #[derive(Debug, Error)]
-pub enum VerifierError {
+pub enum VerifierError<ErrT>
+where
+    ErrT: std::fmt::Debug + std::error::Error + 'static,
+{
     /// bad rho value
     #[error(display = "bad rho value --- must be between 0 and 1")]
     Rho,
@@ -105,24 +145,23 @@ pub enum VerifierError {
     /// bad inner tensor
     #[error(display = "inner tensor: wrong size")]
     InnerTensor,
-    /// error computing FFT
-    #[allow(clippy::upper_case_acronyms)]
-    #[error(display = "fft error: {:?}", _0)]
-    FFT(#[source] FFTError),
+    /// error encoding a vector
+    #[error(display = "encoding error: {:?}", _0)]
+    Encode(#[source] ErrT),
 }
 
 /// result of a verifier operation
-pub type VerifierResult<T> = Result<T, VerifierError>;
+pub type VerifierResult<T, ErrT> = Result<T, VerifierError<ErrT>>;
 
 /// a commitment
 #[derive(Debug, Clone)]
-pub struct LigeroCommit<D, F>
+pub struct LcCommit<D, E>
 where
     D: Digest,
-    F: FieldFFT + FieldHash,
+    E: LcEncoding,
 {
-    comm: Vec<F>,
-    coeffs: Vec<F>,
+    comm: Vec<FldT<E>>,
+    coeffs: Vec<FldT<E>>,
     rho: f64,
     n_col_opens: usize,
     n_degree_tests: usize,
@@ -132,10 +171,10 @@ where
     hashes: Vec<Output<D>>,
 }
 
-impl<D, F> LigeroCommit<D, F>
+impl<D, E> LcCommit<D, E>
 where
     D: Digest,
-    F: FieldFFT + FieldHash,
+    E: LcEncoding,
 {
     /// returns the Merkle root of this polynomial commitment (which is the commitment itself)
     pub fn get_root(&self) -> Option<Output<D>> {
@@ -143,124 +182,120 @@ where
     }
 }
 
+/// LigeroCommit type -- specialization of LcCommit
+pub type LigeroCommit<D, F> = LcCommit<D, LigeroEncoding<F>>;
+
 /// A column opening and the corresponding Merkle path.
 #[derive(Debug, Clone)]
-pub struct LigeroColumn<D, F>
+pub struct LcColumn<D, E>
 where
     D: Digest,
-    F: FieldFFT + FieldHash,
+    E: LcEncoding,
 {
-    col: Vec<F>,
+    col: Vec<FldT<E>>,
     path: Vec<Output<D>>,
 }
 
 /// A column opening and the corresponding Merkle path.
 #[derive(Debug, Clone, Serialize)]
-pub struct WrappedLigeroColumn<F>
+pub struct WrappedLcColumn<E>
 where
-    F: FieldFFT + FieldHash,
+    E: LcEncoding,
 {
-    col: Vec<F>,
+    col: Vec<FldT<E>>,
     path: Vec<WrappedOutput>,
 }
 
-// used locally to hash columns into the transcript
-impl<D, F> LigeroColumn<D, F>
+impl<D, E> LcColumn<D, E>
 where
     D: Digest,
-    F: FieldFFT + FieldHash,
+    E: LcEncoding,
 {
-    fn wrapped(&self) -> WrappedLigeroColumn<F> {
+    // used locally to hash columns into the transcript
+    fn wrapped(&self) -> WrappedLcColumn<E> {
         let path_wrapped = (0..self.path.len())
             .map(|i| WrappedOutput {
                 bytes: self.path[i].to_vec(),
             })
             .collect();
 
-        WrappedLigeroColumn {
+        WrappedLcColumn {
             col: self.col.clone(),
             path: path_wrapped,
         }
     }
-}
 
-impl<D, F> LigeroColumn<D, F>
-where
-    D: Digest,
-    F: FieldFFT + FieldHash,
-{
-    /// unwrap WrappedLigeroColumn
-    pub fn unwrapped(inp: &WrappedLigeroColumn<F>) -> LigeroColumn<D, F> {
+    /// unwrap WrappedLcColumn
+    pub fn unwrapped(inp: &WrappedLcColumn<E>) -> LcColumn<D, E> {
         let path_unwrapped = (0..inp.path.len())
             .map(|_i| <Output<D> as Default>::default())
             .collect();
 
-        LigeroColumn {
+        LcColumn {
             col: inp.col.clone(),
             path: path_unwrapped,
         }
     }
 }
 
+/// LigeroColumn type --- specialization of LcColumn
+pub type LigeroColumn<D, F> = LcColumn<D, LigeroEncoding<F>>;
+
+/// WrappedLigeroColumn type --- specialization of WrappedLcColumn
+pub type WrappedLigeroColumn<F> = WrappedLcColumn<LigeroEncoding<F>>;
+
 /// An evaluation and proof of its correctness and of the low-degreeness of the commitment.
 #[derive(Debug, Clone)]
-pub struct LigeroEvalProof<D, F>
+pub struct LcEvalProof<D, E>
 where
     D: Digest,
-    F: FieldFFT + FieldHash,
+    E: LcEncoding,
 {
     n_cols: usize,
-    p_eval: Vec<F>,
-    p_random_vec: Vec<Vec<F>>,
-    columns: Vec<LigeroColumn<D, F>>,
+    p_eval: Vec<FldT<E>>,
+    p_random_vec: Vec<Vec<FldT<E>>>,
+    columns: Vec<LcColumn<D, E>>,
 }
 
 /// An evaluation and proof of its correctness and of the low-degreeness of the commitment.
 #[derive(Debug, Clone, Serialize)]
-pub struct WrappedLigeroEvalProof<F>
+pub struct WrappedLcEvalProof<E>
 where
-    F: FieldFFT + FieldHash,
+    E: LcEncoding,
 {
     n_cols: usize,
-    p_eval: Vec<F>,
-    p_random_vec: Vec<Vec<F>>,
-    columns: Vec<WrappedLigeroColumn<F>>,
+    p_eval: Vec<FldT<E>>,
+    p_random_vec: Vec<Vec<FldT<E>>>,
+    columns: Vec<WrappedLcColumn<E>>,
 }
 
 // used locally to hash columns into the transcript
-impl<D, F> LigeroEvalProof<D, F>
+impl<D, E> LcEvalProof<D, E>
 where
     D: Digest,
-    F: FieldFFT + FieldHash,
+    E: LcEncoding,
 {
     /// wrapped method
-    pub fn wrapped(&self) -> WrappedLigeroEvalProof<F> {
+    pub fn wrapped(&self) -> WrappedLcEvalProof<E> {
         let columns_wrapped = (0..self.columns.len())
             .map(|i| self.columns[i].wrapped())
             .collect();
 
-        WrappedLigeroEvalProof {
+        WrappedLcEvalProof {
             n_cols: self.n_cols,
             p_eval: self.p_eval.clone(),
             p_random_vec: self.p_random_vec.clone(),
             columns: columns_wrapped,
         }
     }
-}
 
-// used locally to hash columns into the transcript
-impl<D, F> LigeroEvalProof<D, F>
-where
-    D: Digest,
-    F: FieldFFT + FieldHash,
-{
     /// unwrapped method
-    pub fn unwrapped(inp: &WrappedLigeroEvalProof<F>) -> LigeroEvalProof<D, F> {
+    pub fn unwrapped(inp: &WrappedLcEvalProof<E>) -> LcEvalProof<D, E> {
         let columns_unwrapped = (0..inp.columns.len())
-            .map(|i| LigeroColumn::unwrapped(&inp.columns[i]))
+            .map(|i| LcColumn::unwrapped(&inp.columns[i]))
             .collect();
 
-        LigeroEvalProof {
+        LcEvalProof {
             n_cols: inp.n_cols,
             p_eval: inp.p_eval.clone(),
             p_random_vec: inp.p_random_vec.clone(),
@@ -269,19 +304,25 @@ where
     }
 }
 
+/// LigerEvalProof type --- specialization of LcEvalProof type
+pub type LigeroEvalProof<D, F> = LcEvalProof<D, LigeroEncoding<F>>;
+
+/// WrappedLigerEvalProof type --- specialization of WrappedLcEvalProof type
+pub type WrappedLigeroEvalProof<F> = WrappedLcEvalProof<LigeroEncoding<F>>;
+
 // parallelization limit when working on columns
 const LOG_MIN_NCOLS: usize = 5;
 
 /// Commit to a univariate polynomial whose coefficients are `coeffs` using Reed-Solomon rate `0 < rho < 1`.
-pub fn commit<D, F>(
-    coeffs: &[F],
+pub fn commit<D, E>(
+    coeffs: &[FldT<E>],
     rho: f64,
     n_degree_tests: usize,
     n_col_opens: usize,
-) -> ProverResult<LigeroCommit<D, F>>
+) -> ProverResult<LcCommit<D, E>, ErrT<E>>
 where
     D: Digest,
-    F: FieldFFT + FieldHash,
+    E: LcEncoding,
 {
     let (n_rows, n_per_row, n_cols) = get_dims(coeffs.len(), rho)?;
     commit_with_dims(
@@ -296,18 +337,18 @@ where
 }
 
 /// Commit to a polynomial whose coeffs are `coeffs_in` using the given rate and dimensions.
-pub fn commit_with_dims<D, F>(
-    coeffs_in: &[F],
+pub fn commit_with_dims<D, E>(
+    coeffs_in: &[FldT<E>],
     rho: f64,
     n_degree_tests: usize,
     n_col_opens: usize,
     n_rows: usize,
     n_per_row: usize,
     n_cols: usize,
-) -> ProverResult<LigeroCommit<D, F>>
+) -> ProverResult<LcCommit<D, E>, ErrT<E>>
 where
     D: Digest,
-    F: FieldFFT + FieldHash,
+    E: LcEncoding,
 {
     // check that parameters are ok
     assert!(n_rows * n_per_row >= coeffs_in.len());
@@ -317,8 +358,8 @@ where
 
     // matrix (encoded as a vector)
     // XXX(zk) pad coeffs
-    let mut coeffs = vec![F::zero(); n_rows * n_per_row];
-    let mut comm = vec![F::zero(); n_rows * n_cols];
+    let mut coeffs = vec![FldT::<E>::zero(); n_rows * n_per_row];
+    let mut comm = vec![FldT::<E>::zero(); n_rows * n_cols];
 
     // local copy of coeffs with padding
     coeffs
@@ -333,11 +374,11 @@ where
         .zip(coeffs.par_chunks(n_per_row))
         .try_for_each(|(r, c)| {
             r[..c.len()].copy_from_slice(c);
-            <F as FieldFFT>::fft_io(r)
+            <E as LcEncoding>::encode(r)
         })?;
 
     // compute Merkle tree
-    let mut ret = LigeroCommit {
+    let mut ret = LcCommit {
         comm,
         coeffs,
         rho,
@@ -353,15 +394,18 @@ where
     Ok(ret)
 }
 
-fn get_dims(len: usize, rho: f64) -> ProverResult<(usize, usize, usize)> {
+fn get_dims<ErrT>(len: usize, rho: f64) -> ProverResult<(usize, usize, usize), ErrT>
+where
+    ErrT: std::error::Error,
+{
     if rho <= 0f64 || rho >= 1f64 {
-        return Err(ProverError::Rho);
+        return Err(ProverError::<ErrT>::Rho);
     }
 
     // compute #cols, which must be a power of 2 because of FFT
     let nc = (((len as f64).sqrt() / rho).ceil() as usize)
         .checked_next_power_of_two()
-        .ok_or(ProverError::TooBig)?;
+        .ok_or(ProverError::<ErrT>::TooBig)?;
 
     // minimize nr subject to #cols and rho
     let np = ((nc as f64) * rho).floor() as usize;
@@ -372,17 +416,17 @@ fn get_dims(len: usize, rho: f64) -> ProverResult<(usize, usize, usize)> {
     Ok((nr, np, nc))
 }
 
-fn merkleize<D, F>(comm: &mut LigeroCommit<D, F>) -> ProverResult<()>
+fn merkleize<D, E>(comm: &mut LcCommit<D, E>) -> ProverResult<(), ErrT<E>>
 where
     D: Digest,
-    F: FieldFFT + FieldHash,
+    E: LcEncoding,
 {
     // make sure commitment is self consistent
     check_comm(comm)?;
 
     // step 1: hash each column of the commitment (we always reveal a full column)
     let hashes = &mut comm.hashes[..comm.n_cols];
-    hash_columns::<D, F>(&comm.comm, hashes, comm.n_rows, comm.n_cols, 0);
+    hash_columns::<D, E>(&comm.comm, hashes, comm.n_rows, comm.n_cols, 0);
 
     // step 2: compute rest of Merkle tree
     let (hin, hout) = comm.hashes.split_at_mut(comm.n_cols);
@@ -392,10 +436,10 @@ where
 }
 
 #[cfg(test)]
-fn merkleize_ser<D, F>(comm: &mut LigeroCommit<D, F>) -> ProverResult<()>
+fn merkleize_ser<D, E>(comm: &mut LcCommit<D, E>) -> ProverResult<(), ErrT<E>>
 where
     D: Digest,
-    F: FieldFFT + FieldHash,
+    E: LcEncoding,
 {
     check_comm(comm)?;
 
@@ -428,10 +472,10 @@ where
     Ok(())
 }
 
-fn check_comm<D, F>(comm: &LigeroCommit<D, F>) -> ProverResult<()>
+fn check_comm<D, E>(comm: &LcCommit<D, E>) -> ProverResult<(), ErrT<E>>
 where
     D: Digest,
-    F: FieldFFT + FieldHash,
+    E: LcEncoding,
 {
     let comm_sz = comm.comm.len() != comm.n_rows * comm.n_cols;
     let coeff_sz = comm.coeffs.len() != comm.n_rows * comm.n_per_row;
@@ -446,15 +490,15 @@ where
     }
 }
 
-fn hash_columns<D, F>(
-    comm: &[F],
+fn hash_columns<D, E>(
+    comm: &[FldT<E>],
     hashes: &mut [Output<D>],
     n_rows: usize,
     n_cols: usize,
     offset: usize,
 ) where
     D: Digest,
-    F: FieldFFT + FieldHash,
+    E: LcEncoding,
 {
     if hashes.len() <= (1 << LOG_MIN_NCOLS) {
         // base case: run the computation
@@ -481,8 +525,8 @@ fn hash_columns<D, F>(
         let half_cols = hashes.len() / 2;
         let (lo, hi) = hashes.split_at_mut(half_cols);
         rayon::join(
-            || hash_columns::<D, F>(comm, lo, n_rows, n_cols, offset),
-            || hash_columns::<D, F>(comm, hi, n_rows, n_cols, offset + half_cols),
+            || hash_columns::<D, E>(comm, lo, n_rows, n_cols, offset),
+            || hash_columns::<D, E>(comm, hi, n_rows, n_cols, offset + half_cols),
         );
     }
 }
@@ -528,13 +572,13 @@ where
 }
 
 // Open the commitment to one column
-fn open_column<D, F>(
-    comm: &LigeroCommit<D, F>,
+fn open_column<D, E>(
+    comm: &LcCommit<D, E>,
     mut column: usize,
-) -> ProverResult<LigeroColumn<D, F>>
+) -> ProverResult<LcColumn<D, E>, ErrT<E>>
 where
     D: Digest,
-    F: FieldFFT + FieldHash,
+    E: LcEncoding,
 {
     // make sure arguments are well formed
     if column >= comm.n_cols {
@@ -564,7 +608,7 @@ where
     }
     assert_eq!(column, 0);
 
-    Ok(LigeroColumn { col, path })
+    Ok(LcColumn { col, path })
 }
 
 fn log2(v: usize) -> usize {
@@ -573,19 +617,19 @@ fn log2(v: usize) -> usize {
 
 /// Verify the evaluation of a committed polynomial and return the result
 #[allow(clippy::too_many_arguments)]
-pub fn verify<D, F>(
+pub fn verify<D, E>(
     root: &Output<D>,
-    outer_tensor: &[F],
-    inner_tensor: &[F],
-    proof: &LigeroEvalProof<D, F>,
+    outer_tensor: &[FldT<E>],
+    inner_tensor: &[FldT<E>],
+    proof: &LcEvalProof<D, E>,
     rho: f64,
     n_degree_tests: usize,
     n_col_opens: usize,
     tr: &mut Transcript,
-) -> VerifierResult<F>
+) -> VerifierResult<FldT<E>, ErrT<E>>
 where
     D: Digest,
-    F: FieldFFT + FieldHash,
+    E: LcEncoding,
 {
     // make sure arguments are well formed
     if n_col_opens != proof.columns.len() || n_col_opens == 0 {
@@ -607,27 +651,27 @@ where
     // step 1: random tensor for degree test and random columns to test
     // step 1a: extract random tensor from transcript
     // we run multiple instances of this to boost soundness
-    let mut rand_tensor_vec: Vec<Vec<F>> = Vec::new();
-    let mut p_random_fft: Vec<Vec<F>> = Vec::new();
+    let mut rand_tensor_vec: Vec<Vec<FldT<E>>> = Vec::new();
+    let mut p_random_fft: Vec<Vec<FldT<E>>> = Vec::new();
     for i in 0..n_degree_tests {
-        let rand_tensor: Vec<F> = {
+        let rand_tensor: Vec<FldT<E>> = {
             let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
             tr.challenge_bytes(b"ligero-pc//eval//degree_test", &mut key);
             let mut deg_test_rng = ChaCha20Rng::from_seed(key);
             // XXX(optimization) could expand seed in parallel instead of in series
-            repeat_with(|| F::random(&mut deg_test_rng))
+            repeat_with(|| FldT::<E>::random(&mut deg_test_rng))
                 .take(n_rows)
                 .collect()
         };
 
         rand_tensor_vec.push(rand_tensor);
 
-        // step 1b: eval FFT of p_random
+        // step 1b: eval encoding of p_random
         {
             let mut tmp = Vec::with_capacity(n_cols);
             tmp.extend_from_slice(&proof.p_random_vec[i][..]);
-            tmp.resize(n_cols, F::zero());
-            <F as FieldFFT>::fft_io(&mut tmp)?;
+            tmp.resize(n_cols, FldT::<E>::zero());
+            <E as LcEncoding>::encode(&mut tmp)?;
             p_random_fft.push(tmp);
         };
 
@@ -658,8 +702,8 @@ where
     let p_eval_fft = {
         let mut tmp = Vec::with_capacity(n_cols);
         tmp.extend_from_slice(&proof.p_eval[..]);
-        tmp.resize(n_cols, F::zero());
-        <F as FieldFFT>::fft_io(&mut tmp)?;
+        tmp.resize(n_cols, FldT::<E>::zero());
+        <E as LcEncoding>::encode(&mut tmp)?;
         tmp
     };
 
@@ -677,7 +721,7 @@ where
                 rand
             };
 
-            let eval = verify_column_value(column, &outer_tensor, &p_eval_fft[col_num]);
+            let eval = verify_column_value(column, outer_tensor, &p_eval_fft[col_num]);
             let path = verify_column_path(column, col_num, root);
             match (rand, eval, path) {
                 (false, _, _) => Err(VerifierError::ColumnDegree),
@@ -691,15 +735,15 @@ where
     Ok(inner_tensor
         .par_iter()
         .zip(&proof.p_eval[..])
-        .fold(F::zero, |a, (t, e)| a + *t * e)
-        .reduce(F::zero, |a, v| a + v))
+        .fold(FldT::<E>::zero, |a, (t, e)| a + *t * e)
+        .reduce(FldT::<E>::zero, |a, v| a + v))
 }
 
 // Check a column opening
-fn verify_column_path<D, F>(column: &LigeroColumn<D, F>, col_num: usize, root: &Output<D>) -> bool
+fn verify_column_path<D, E>(column: &LcColumn<D, E>, col_num: usize, root: &Output<D>) -> bool
 where
     D: Digest,
-    F: FieldFFT + FieldHash,
+    E: LcEncoding,
 {
     let mut digest = D::new();
     digest.update(<Output<D> as Default>::default());
@@ -726,45 +770,49 @@ where
 }
 
 // check column value
-fn verify_column_value<D, F>(column: &LigeroColumn<D, F>, tensor: &[F], poly_eval: &F) -> bool
+fn verify_column_value<D, E>(
+    column: &LcColumn<D, E>,
+    tensor: &[FldT<E>],
+    poly_eval: &FldT<E>,
+) -> bool
 where
     D: Digest,
-    F: FieldFFT + FieldHash,
+    E: LcEncoding,
 {
     let tensor_eval = tensor
         .iter()
         .zip(&column.col[..])
-        .fold(F::zero(), |a, (t, e)| a + *t * e);
+        .fold(FldT::<E>::zero(), |a, (t, e)| a + *t * e);
 
     poly_eval == &tensor_eval
 }
 
 #[cfg(test)]
 // Check a column opening
-fn verify_column<D, F>(
-    column: &LigeroColumn<D, F>,
+fn verify_column<D, E>(
+    column: &LcColumn<D, E>,
     col_num: usize,
     root: &Output<D>,
-    tensor: &[F],
-    poly_eval: &F,
+    tensor: &[FldT<E>],
+    poly_eval: &FldT<E>,
 ) -> bool
 where
     D: Digest,
-    F: FieldFFT + FieldHash,
+    E: LcEncoding,
 {
     verify_column_path(column, col_num, root) && verify_column_value(column, tensor, poly_eval)
 }
 
 /// Evaluate the committed polynomial using the supplied "outer" tensor
 /// and generate a proof of (1) low-degreeness and (2) correct evaluation.
-pub fn prove<D, F>(
-    comm: &LigeroCommit<D, F>,
-    outer_tensor: &[F],
+pub fn prove<D, E>(
+    comm: &LcCommit<D, E>,
+    outer_tensor: &[FldT<E>],
     tr: &mut Transcript,
-) -> ProverResult<LigeroEvalProof<D, F>>
+) -> ProverResult<LcEvalProof<D, E>, ErrT<E>>
 where
     D: Digest,
-    F: FieldFFT + FieldHash,
+    E: LcEncoding,
 {
     // make sure arguments are well formed
     check_comm(comm)?;
@@ -774,18 +822,18 @@ where
 
     // first, evaluate the polynomial on a random tensor (low-degree test)
     // we repeat this to boost soundness
-    let mut p_random_vec: Vec<Vec<F>> = Vec::new();
+    let mut p_random_vec: Vec<Vec<FldT<E>>> = Vec::new();
     for _i in 0..comm.n_degree_tests {
         let p_random = {
             let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
             tr.challenge_bytes(b"ligero-pc//eval//degree_test", &mut key);
             let mut deg_test_rng = ChaCha20Rng::from_seed(key);
             // XXX(optimization) could expand seed in parallel instead of in series
-            let rand_tensor: Vec<F> = repeat_with(|| F::random(&mut deg_test_rng))
+            let rand_tensor: Vec<FldT<E>> = repeat_with(|| FldT::<E>::random(&mut deg_test_rng))
                 .take(comm.n_rows)
                 .collect();
-            let mut tmp = vec![F::zero(); comm.n_per_row];
-            collapse_columns(
+            let mut tmp = vec![FldT::<E>::zero(); comm.n_per_row];
+            collapse_columns::<E>(
                 &comm.coeffs,
                 &rand_tensor,
                 &mut tmp,
@@ -805,8 +853,8 @@ where
 
     // next, evaluate the polynomial using the supplied tensor
     let p_eval = {
-        let mut tmp = vec![F::zero(); comm.n_per_row];
-        collapse_columns(
+        let mut tmp = vec![FldT::<E>::zero(); comm.n_per_row];
+        collapse_columns::<E>(
             &comm.coeffs,
             outer_tensor,
             &mut tmp,
@@ -824,7 +872,7 @@ where
     // now extract the column numbers to open
     // XXX(F-S) should we do this column-by-column, updating the transcript for each???
     //          It doesn't seem necessary to me...
-    let columns: Vec<LigeroColumn<D, F>> = {
+    let columns: Vec<LcColumn<D, E>> = {
         let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
         tr.challenge_bytes(b"ligero-pc//eval//cols_to_open", &mut key);
         let mut cols_rng = ChaCha20Rng::from_seed(key);
@@ -836,10 +884,10 @@ where
         cols_to_open
             .par_iter()
             .map(|&col| open_column(comm, col))
-            .collect::<ProverResult<Vec<LigeroColumn<D, F>>>>()?
+            .collect::<ProverResult<Vec<LcColumn<D, E>>, ErrT<E>>>()?
     };
 
-    Ok(LigeroEvalProof {
+    Ok(LcEvalProof {
         n_cols: comm.n_cols,
         p_eval,
         p_random_vec,
@@ -849,10 +897,13 @@ where
 
 // Evaluate the committed polynomial using the "outer" tensor
 #[cfg(test)]
-fn eval_outer<D, F>(comm: &LigeroCommit<D, F>, tensor: &[F]) -> ProverResult<Vec<F>>
+fn eval_outer<D, E>(
+    comm: &LcCommit<D, E>,
+    tensor: &[FldT<E>],
+) -> ProverResult<Vec<FldT<E>>, ErrT<E>>
 where
     D: Digest,
-    F: FieldFFT + FieldHash,
+    E: LcEncoding,
 {
     // make sure arguments are well formed
     check_comm(comm)?;
@@ -861,8 +912,8 @@ where
     }
 
     // allocate result and compute
-    let mut poly = vec![F::zero(); comm.n_per_row];
-    collapse_columns(
+    let mut poly = vec![FldT::<E>::zero(); comm.n_per_row];
+    collapse_columns::<E>(
         &comm.coeffs,
         tensor,
         &mut poly,
@@ -874,15 +925,15 @@ where
     Ok(poly)
 }
 
-fn collapse_columns<F>(
-    coeffs: &[F],
-    tensor: &[F],
-    poly: &mut [F],
+fn collapse_columns<E>(
+    coeffs: &[FldT<E>],
+    tensor: &[FldT<E>],
+    poly: &mut [FldT<E>],
     n_rows: usize,
     n_per_row: usize,
     offset: usize,
 ) where
-    F: FieldFFT,
+    E: LcEncoding,
 {
     if poly.len() <= (1 << LOG_MIN_NCOLS) {
         // base case: run the computation
@@ -898,24 +949,27 @@ fn collapse_columns<F>(
         let half_cols = poly.len() / 2;
         let (lo, hi) = poly.split_at_mut(half_cols);
         rayon::join(
-            || collapse_columns(coeffs, tensor, lo, n_rows, n_per_row, offset),
-            || collapse_columns(coeffs, tensor, hi, n_rows, n_per_row, offset + half_cols),
+            || collapse_columns::<E>(coeffs, tensor, lo, n_rows, n_per_row, offset),
+            || collapse_columns::<E>(coeffs, tensor, hi, n_rows, n_per_row, offset + half_cols),
         );
     }
 }
 
 #[cfg(test)]
-fn eval_outer_ser<D, F>(comm: &LigeroCommit<D, F>, tensor: &[F]) -> ProverResult<Vec<F>>
+fn eval_outer_ser<D, E>(
+    comm: &LcCommit<D, E>,
+    tensor: &[FldT<E>],
+) -> ProverResult<Vec<FldT<E>>, ErrT<E>>
 where
     D: Digest,
-    F: FieldFFT + FieldHash,
+    E: LcEncoding,
 {
     check_comm(comm)?;
     if tensor.len() != comm.n_rows {
         return Err(ProverError::OuterTensor);
     }
 
-    let mut poly = vec![F::zero(); comm.n_per_row];
+    let mut poly = vec![FldT::<E>::zero(); comm.n_per_row];
     for (row, tensor_val) in tensor.iter().enumerate() {
         for (col, val) in poly.iter_mut().enumerate() {
             let entry = row * comm.n_per_row + col;
@@ -927,17 +981,20 @@ where
 }
 
 #[cfg(test)]
-fn eval_outer_fft<D, F>(comm: &LigeroCommit<D, F>, tensor: &[F]) -> ProverResult<Vec<F>>
+fn eval_outer_fft<D, E>(
+    comm: &LcCommit<D, E>,
+    tensor: &[FldT<E>],
+) -> ProverResult<Vec<FldT<E>>, ErrT<E>>
 where
     D: Digest,
-    F: FieldFFT + FieldHash,
+    E: LcEncoding,
 {
     check_comm(comm)?;
     if tensor.len() != comm.n_rows {
         return Err(ProverError::OuterTensor);
     }
 
-    let mut poly_fft = vec![F::zero(); comm.n_cols];
+    let mut poly_fft = vec![FldT::<E>::zero(); comm.n_cols];
     for (coeffs, tensorval) in comm.comm.chunks(comm.n_cols).zip(tensor.iter()) {
         for (coeff, polyval) in coeffs.iter().zip(poly_fft.iter_mut()) {
             *polyval += *coeff * tensorval;

@@ -7,9 +7,10 @@
 // This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use super::LigeroCommit;
+use super::{LigeroCommit, LigeroEncoding};
 
 use digest::Output;
+use err_derive::Error;
 use ff::Field;
 use fffft::FieldFFT;
 use ft::*;
@@ -20,6 +21,9 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use sha3::Sha3_256;
 use std::iter::repeat_with;
+
+#[derive(Debug, Error)]
+enum DummyError {}
 
 mod ft {
     use crate::FieldHash;
@@ -62,7 +66,7 @@ fn get_dims() {
             let len_base = 1 << (lgl - 1);
             let len = len_base + (rng.gen::<usize>() % len_base);
             let rho = rng.gen_range(0.001f64..1f64);
-            let (n_rows, n_per_row, n_cols) = get_dims(len, rho).unwrap();
+            let (n_rows, n_per_row, n_cols) = get_dims::<DummyError>(len, rho).unwrap();
             assert!(n_rows * n_per_row >= len);
             assert!((n_rows - 1) * n_per_row < len);
             assert!(n_per_row as f64 / rho <= n_cols as f64);
@@ -132,7 +136,7 @@ fn commit() {
     use super::{commit, eval_outer, eval_outer_fft};
 
     let (coeffs, rho) = random_coeffs_rho();
-    let comm = commit::<Sha3_256, _>(&coeffs, rho, 1usize, 128usize).unwrap();
+    let comm = commit::<Sha3_256, LigeroEncoding<_>>(&coeffs, rho, 1usize, 128usize).unwrap();
 
     let x = Ft::random(&mut rand::thread_rng());
 
@@ -177,7 +181,8 @@ fn end_to_end() {
     let (coeffs, rho) = random_coeffs_rho();
     let n_degree_tests = 2;
     let n_col_opens = 128usize;
-    let comm = commit::<Sha3_256, _>(&coeffs, rho, n_degree_tests, n_col_opens).unwrap();
+    let comm =
+        commit::<Sha3_256, LigeroEncoding<_>>(&coeffs, rho, n_degree_tests, n_col_opens).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root().unwrap();
 
@@ -236,7 +241,8 @@ fn end_to_end_two_proofs() {
     let (coeffs, rho) = random_coeffs_rho();
     let n_degree_tests = 1;
     let n_col_opens = 128usize;
-    let comm = commit::<Sha3_256, _>(&coeffs, rho, n_degree_tests, n_col_opens).unwrap();
+    let comm =
+        commit::<Sha3_256, LigeroEncoding<_>>(&coeffs, rho, n_degree_tests, n_col_opens).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root().unwrap();
 
@@ -350,7 +356,7 @@ fn random_comm() -> LigeroCommit<Sha3_256, Ft> {
     let len_base = 1 << (lgl - 1);
     let len = len_base + (rng.gen::<usize>() % len_base);
     let rho = rng.gen_range(0.1f64..0.9f64);
-    let (n_rows, n_per_row, n_cols) = get_dims(len, rho).unwrap();
+    let (n_rows, n_per_row, n_cols) = get_dims::<DummyError>(len, rho).unwrap();
 
     let coeffs_len = (n_per_row - 1) * n_rows + 1 + (rng.gen::<usize>() % n_rows);
     let coeffs = {
