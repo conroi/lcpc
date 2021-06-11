@@ -106,11 +106,10 @@ mod ft {
     impl num_traits::ops::mul_add::MulAdd for Ft {
         type Output = Ft;
 
-        fn mul_add(self, a: Self, b: Self) -> Ft {
-            let mut res = self;
-            res *= &a;
-            res += &b;
-            res
+        fn mul_add(mut self, a: Self, b: Self) -> Ft {
+            self *= &a;
+            self += &b;
+            self
         }
     }
 }
