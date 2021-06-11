@@ -1,24 +1,25 @@
-// Copyright 2020 Riad S. Wahby <rsw@cs.stanford.edu>
+// Copyright 2021 Riad S. Wahby <rsw@cs.stanford.edu>
 //
-// This file is part of ligero-pc.
+// This file is part of lcpc2d, which is part of lcpc.
 //
 // Licensed under the Apache License, Version 2.0 (see
 // LICENSE or https://www.apache.org/licenses/LICENSE-2.0).
 // This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use super::{LigeroCommit, LigeroEncoding};
+use super::{FieldHash, LcCommit, LcEncoding};
 
 use digest::Output;
 use err_derive::Error;
 use ff::Field;
-use fffft::FieldFFT;
+use fffft::{FFTError, FieldFFT};
 use ft::*;
 use itertools::iterate;
 use merlin::Transcript;
 use rand::Rng;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
+use serde::Serialize;
 use sha3::Sha3_256;
 use std::iter::repeat_with;
 
@@ -44,6 +45,25 @@ mod ft {
         }
     }
 }
+
+#[derive(Clone, Debug, Serialize)]
+struct LigeroEncoding<Ft> {
+    _p: std::marker::PhantomData<Ft>,
+}
+
+impl<Ft> LcEncoding for LigeroEncoding<Ft>
+where
+    Ft: FieldFFT + FieldHash + serde::Serialize,
+{
+    type F = Ft;
+    type Err = FFTError;
+
+    fn encode<T: AsMut<[Ft]>>(inp: T) -> Result<(), FFTError> {
+        <Ft as FieldFFT>::fft_io(inp)
+    }
+}
+
+type LigeroCommit<D, F> = LcCommit<D, LigeroEncoding<F>>;
 
 #[test]
 fn log2() {
@@ -136,7 +156,7 @@ fn commit() {
     use super::{commit, eval_outer, eval_outer_fft};
 
     let (coeffs, rho) = random_coeffs_rho();
-    let comm = commit::<Sha3_256, LigeroEncoding<_>>(&coeffs, rho, 1usize, 128usize).unwrap();
+    let comm = commit::<Sha3_256, LigeroEncoding<_>>(&coeffs, rho).unwrap();
 
     let x = Ft::random(&mut rand::thread_rng());
 
@@ -181,8 +201,7 @@ fn end_to_end() {
     let (coeffs, rho) = random_coeffs_rho();
     let n_degree_tests = 2;
     let n_col_opens = 128usize;
-    let comm =
-        commit::<Sha3_256, LigeroEncoding<_>>(&coeffs, rho, n_degree_tests, n_col_opens).unwrap();
+    let comm = commit::<Sha3_256, LigeroEncoding<_>>(&coeffs, rho).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root().unwrap();
 
@@ -211,7 +230,14 @@ fn end_to_end() {
     tr1.append_message(b"polycommit", root.as_ref());
     tr1.append_message(b"rate", &rho.to_be_bytes()[..]);
     tr1.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
-    let pf = prove::<Sha3_256, _>(&comm, &outer_tensor[..], &mut tr1).unwrap();
+    let pf = prove::<Sha3_256, _>(
+        &comm,
+        &outer_tensor[..],
+        n_degree_tests,
+        n_col_opens,
+        &mut tr1,
+    )
+    .unwrap();
 
     // verify it and finish evaluation
     let mut tr2 = Transcript::new(b"test transcript");
@@ -241,8 +267,7 @@ fn end_to_end_two_proofs() {
     let (coeffs, rho) = random_coeffs_rho();
     let n_degree_tests = 1;
     let n_col_opens = 128usize;
-    let comm =
-        commit::<Sha3_256, LigeroEncoding<_>>(&coeffs, rho, n_degree_tests, n_col_opens).unwrap();
+    let comm = commit::<Sha3_256, LigeroEncoding<_>>(&coeffs, rho).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root().unwrap();
 
@@ -271,7 +296,14 @@ fn end_to_end_two_proofs() {
     tr1.append_message(b"polycommit", root.as_ref());
     tr1.append_message(b"rate", &rho.to_be_bytes()[..]);
     tr1.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
-    let pf = prove::<Sha3_256, _>(&comm, &outer_tensor[..], &mut tr1).unwrap();
+    let pf = prove::<Sha3_256, _>(
+        &comm,
+        &outer_tensor[..],
+        n_degree_tests,
+        n_col_opens,
+        &mut tr1,
+    )
+    .unwrap();
 
     let challenge_after_first_proof_prover = {
         let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
@@ -284,7 +316,14 @@ fn end_to_end_two_proofs() {
     tr1.append_message(b"polycommit", root.as_ref());
     tr1.append_message(b"rate", &rho.to_be_bytes()[..]);
     tr1.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
-    let pf2 = prove::<Sha3_256, _>(&comm, &outer_tensor[..], &mut tr1).unwrap();
+    let pf2 = prove::<Sha3_256, _>(
+        &comm,
+        &outer_tensor[..],
+        n_degree_tests,
+        n_col_opens,
+        &mut tr1,
+    )
+    .unwrap();
 
     // verify it and finish evaluation
     let mut tr2 = Transcript::new(b"test transcript");
@@ -376,8 +415,6 @@ fn random_comm() -> LigeroCommit<Sha3_256, Ft> {
         comm,
         coeffs,
         rho,
-        n_degree_tests: 1usize,
-        n_col_opens: 128usize,
         n_rows,
         n_cols,
         n_per_row,

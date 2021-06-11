@@ -1,6 +1,6 @@
 // Copyright 2021 Riad S. Wahby <rsw@cs.stanford.edu>
 //
-// This file is part of lcpc2d.
+// This file is part of lcpc2d, which is part of lcpc.
 //
 // Licensed under the Apache License, Version 2.0 (see
 // LICENSE or https://www.apache.org/licenses/LICENSE-2.0).
@@ -15,7 +15,6 @@ lcpc2d is a polynomial commitment scheme based on linear codes
 use digest::{Digest, Output};
 use err_derive::Error;
 use ff::Field;
-use fffft::{FFTError, FieldFFT};
 use merlin::Transcript;
 use rand::{
     distributions::{Distribution, Uniform},
@@ -26,15 +25,15 @@ use rayon::prelude::*;
 use serde::Serialize;
 use std::iter::repeat_with;
 
+#[cfg(test)]
+mod tests;
+
 /// A type to wrap Output<D>
 #[derive(Debug, Clone, Serialize)]
 pub struct WrappedOutput {
     /// wrapped output
     pub bytes: Vec<u8>,
 }
-
-#[cfg(test)]
-mod tests;
 
 /// Trait for a field element that can be hashed via [digest::Digest]
 pub trait FieldHash {
@@ -70,24 +69,6 @@ pub trait LcEncoding: Clone + std::fmt::Debug + serde::Serialize {
 // local accessors for enclosed types
 type FldT<E> = <E as LcEncoding>::F;
 type ErrT<E> = <E as LcEncoding>::Err;
-
-/// Ligero encoding type
-#[derive(Clone, Debug, Serialize)]
-pub struct LigeroEncoding<Ft> {
-    _p: std::marker::PhantomData<Ft>,
-}
-
-impl<Ft> LcEncoding for LigeroEncoding<Ft>
-where
-    Ft: FieldFFT + FieldHash + serde::Serialize,
-{
-    type F = Ft;
-    type Err = FFTError;
-
-    fn encode<T: AsMut<[Ft]>>(inp: T) -> Result<(), FFTError> {
-        <Ft as FieldFFT>::fft_io(inp)
-    }
-}
 
 /// Err variant for prover operations
 #[derive(Debug, Error)]
@@ -163,8 +144,6 @@ where
     comm: Vec<FldT<E>>,
     coeffs: Vec<FldT<E>>,
     rho: f64,
-    n_col_opens: usize,
-    n_degree_tests: usize,
     n_rows: usize,
     n_cols: usize,
     n_per_row: usize,
@@ -180,10 +159,49 @@ where
     pub fn get_root(&self) -> Option<Output<D>> {
         self.hashes.last().cloned()
     }
-}
 
-/// LigeroCommit type -- specialization of LcCommit
-pub type LigeroCommit<D, F> = LcCommit<D, LigeroEncoding<F>>;
+    /// return the number of coefficients encoded in each matrix row
+    pub fn get_n_per_row(&self) -> usize {
+        self.n_per_row
+    }
+
+    /// return the number of columns in the encoded matrix
+    pub fn get_n_cols(&self) -> usize {
+        self.n_cols
+    }
+
+    /// return the number of rows in the encoded matrix
+    pub fn get_n_rows(&self) -> usize {
+        self.n_rows
+    }
+
+    /// generate a commitment to a polynomial
+    pub fn commit(coeffs: &[FldT<E>], rho: f64) -> ProverResult<Self, ErrT<E>> {
+        commit(coeffs, rho)
+    }
+
+    /// generate a commitment to a polynomial with explicit dimensions
+    pub fn commit_with_dims(
+        coeffs_in: &[FldT<E>],
+        rho: f64,
+        n_rows: usize,
+        n_per_row: usize,
+        n_cols: usize,
+    ) -> ProverResult<Self, ErrT<E>> {
+        commit_with_dims(coeffs_in, rho, n_rows, n_per_row, n_cols)
+    }
+
+    /// Generate an evaluation of a committed polynomial
+    pub fn prove(
+        &self,
+        outer_tensor: &[FldT<E>],
+        n_degree_tests: usize,
+        n_col_opens: usize,
+        tr: &mut Transcript,
+    ) -> ProverResult<LcEvalProof<D, E>, ErrT<E>> {
+        prove(self, outer_tensor, n_degree_tests, n_col_opens, tr)
+    }
+}
 
 /// A column opening and the corresponding Merkle path.
 #[derive(Debug, Clone)]
@@ -237,12 +255,6 @@ where
         }
     }
 }
-
-/// LigeroColumn type --- specialization of LcColumn
-pub type LigeroColumn<D, F> = LcColumn<D, LigeroEncoding<F>>;
-
-/// WrappedLigeroColumn type --- specialization of WrappedLcColumn
-pub type WrappedLigeroColumn<F> = WrappedLcColumn<LigeroEncoding<F>>;
 
 /// An evaluation and proof of its correctness and of the low-degreeness of the commitment.
 #[derive(Debug, Clone)]
@@ -302,46 +314,49 @@ where
             columns: columns_unwrapped,
         }
     }
+
+    /// Verify an evaluation proof and return the resulting evaluation
+    #[allow(clippy::too_many_arguments)]
+    pub fn verify(
+        &self,
+        root: &Output<D>,
+        outer_tensor: &[FldT<E>],
+        inner_tensor: &[FldT<E>],
+        rho: f64,
+        n_degree_tests: usize,
+        n_col_opens: usize,
+        tr: &mut Transcript,
+    ) -> VerifierResult<FldT<E>, ErrT<E>> {
+        verify(
+            root,
+            outer_tensor,
+            inner_tensor,
+            self,
+            rho,
+            n_degree_tests,
+            n_col_opens,
+            tr,
+        )
+    }
 }
-
-/// LigerEvalProof type --- specialization of LcEvalProof type
-pub type LigeroEvalProof<D, F> = LcEvalProof<D, LigeroEncoding<F>>;
-
-/// WrappedLigerEvalProof type --- specialization of WrappedLcEvalProof type
-pub type WrappedLigeroEvalProof<F> = WrappedLcEvalProof<LigeroEncoding<F>>;
 
 // parallelization limit when working on columns
 const LOG_MIN_NCOLS: usize = 5;
 
 /// Commit to a univariate polynomial whose coefficients are `coeffs` using Reed-Solomon rate `0 < rho < 1`.
-pub fn commit<D, E>(
-    coeffs: &[FldT<E>],
-    rho: f64,
-    n_degree_tests: usize,
-    n_col_opens: usize,
-) -> ProverResult<LcCommit<D, E>, ErrT<E>>
+fn commit<D, E>(coeffs: &[FldT<E>], rho: f64) -> ProverResult<LcCommit<D, E>, ErrT<E>>
 where
     D: Digest,
     E: LcEncoding,
 {
     let (n_rows, n_per_row, n_cols) = get_dims(coeffs.len(), rho)?;
-    commit_with_dims(
-        coeffs,
-        rho,
-        n_degree_tests,
-        n_col_opens,
-        n_rows,
-        n_per_row,
-        n_cols,
-    )
+    commit_with_dims(coeffs, rho, n_rows, n_per_row, n_cols)
 }
 
 /// Commit to a polynomial whose coeffs are `coeffs_in` using the given rate and dimensions.
-pub fn commit_with_dims<D, E>(
+fn commit_with_dims<D, E>(
     coeffs_in: &[FldT<E>],
     rho: f64,
-    n_degree_tests: usize,
-    n_col_opens: usize,
     n_rows: usize,
     n_per_row: usize,
     n_cols: usize,
@@ -382,8 +397,6 @@ where
         comm,
         coeffs,
         rho,
-        n_degree_tests,
-        n_col_opens,
         n_rows,
         n_cols,
         n_per_row,
@@ -617,7 +630,7 @@ fn log2(v: usize) -> usize {
 
 /// Verify the evaluation of a committed polynomial and return the result
 #[allow(clippy::too_many_arguments)]
-pub fn verify<D, E>(
+fn verify<D, E>(
     root: &Output<D>,
     outer_tensor: &[FldT<E>],
     inner_tensor: &[FldT<E>],
@@ -805,9 +818,11 @@ where
 
 /// Evaluate the committed polynomial using the supplied "outer" tensor
 /// and generate a proof of (1) low-degreeness and (2) correct evaluation.
-pub fn prove<D, E>(
+fn prove<D, E>(
     comm: &LcCommit<D, E>,
     outer_tensor: &[FldT<E>],
+    n_degree_tests: usize,
+    n_col_opens: usize,
     tr: &mut Transcript,
 ) -> ProverResult<LcEvalProof<D, E>, ErrT<E>>
 where
@@ -823,7 +838,7 @@ where
     // first, evaluate the polynomial on a random tensor (low-degree test)
     // we repeat this to boost soundness
     let mut p_random_vec: Vec<Vec<FldT<E>>> = Vec::new();
-    for _i in 0..comm.n_degree_tests {
+    for _i in 0..n_degree_tests {
         let p_random = {
             let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
             tr.challenge_bytes(b"ligero-pc//eval//degree_test", &mut key);
@@ -879,7 +894,7 @@ where
         // XXX(optimization) could expand seed in parallel instead of in series
         let col_range = Uniform::new(0usize, comm.n_cols);
         let cols_to_open: Vec<usize> = repeat_with(|| col_range.sample(&mut cols_rng))
-            .take(comm.n_col_opens)
+            .take(n_col_opens)
             .collect();
         cols_to_open
             .par_iter()

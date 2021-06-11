@@ -1,2 +1,2 @@
 [workspace]
-members = [ "lcpc2d", ]
+members = [ "lcpc2d", "ligero-pc" ]
