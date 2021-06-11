@@ -17,8 +17,6 @@ serde = { version = "1.0.106", features = ["derive"] }
 [dev-dependencies]
 bitvec = "0.20"
 byteorder = "1"
-digest = "0.9"
-err-derive = "0.2"
 ff = { version = "0.9", features = ["derive"] }
 itertools = "0.9"
 merlin = "2.0"
