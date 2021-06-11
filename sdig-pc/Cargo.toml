@@ -1,0 +1,17 @@
+[package]
+name = "sdig-pc"
+version = "0.1.0"
+authors = ["kwantam <kwantam@gmail.com>"]
+edition = "2018"
+description = "polynomial commitment scheme from SDIG expander code"
+license = "Apache-2.0"
+repository = "https://github.com/kwantam/lcpc"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+sprs = "0.10"
+
+[dev-dependencies]
+rand = "0.8"
+ndarray = ">=0.11.0,<0.15"
