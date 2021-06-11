@@ -10,10 +10,9 @@ repository = "https://github.com/kwantam/lcpc"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-err-derive = "0.2"
 digest = "0.9"
+err-derive = "0.2"
 ff = "0.9"
-fffft = "0.2"
 merlin = "2.0"
 rand = "0.8"
 rand_chacha = "0.3"
@@ -24,9 +23,8 @@ serde = { version = "1.0.106", features = ["derive"] }
 bitvec = "0.20"
 byteorder = "1"
 ff = { version = "0.9", features = ["derive"] }
+fffft = "0.2"
 itertools = "0.9"
 rand_core = "0.6"
-rug = "1"
-rug-fft = "0.1"
 sha3 = "0.9"
 subtle = "2.2"
