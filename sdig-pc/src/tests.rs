@@ -17,7 +17,7 @@ mod ft {
     use ff::PrimeField;
     use ff_derive_num::Num;
 
-    #[derive(PrimeField,Num)]
+    #[derive(PrimeField, Num)]
     #[PrimeFieldModulus = "70386805592835581672624750593"]
     #[PrimeFieldGenerator = "17"]
     #[PrimeFieldReprEndianness = "little"]
@@ -44,7 +44,8 @@ fn sprs_playground() {
             tmp.add_triplet(i, col1, Ft::random(&mut rng));
             tmp.add_triplet(i, col2, Ft::random(&mut rng));
         }
-        // csr appears to be considerably faster than csc
+        // to_csr appears to be considerably faster than to_csc
+        // (note that because of the transpose, we end up with csc in the end)
         tmp.to_csr().transpose_into()
     };
 
@@ -62,4 +63,19 @@ fn sprs_playground() {
         t += mv[i % n_cols];
     }
     println!("{:?}", t);
+}
+
+#[test]
+fn test_matgen_check_seed() {
+    let mut rng = thread_rng();
+    use super::matgen::check_seed;
+
+    let n = 256usize + (rng.gen::<usize>() % 4096usize);
+    for seed in 0..1024u64 {
+        if check_seed::<Ft>(n, seed) {
+            println!("Seed {} was good for n={}", seed, n);
+            return;
+        }
+    }
+    panic!("did not find a good seed");
 }
