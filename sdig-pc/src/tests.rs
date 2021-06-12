@@ -14,104 +14,14 @@ use rand::{thread_rng, Rng};
 use sprs::{CsMat, TriMat};
 
 mod ft {
-    use ff::{Field, PrimeField};
+    use ff::PrimeField;
+    use ff_derive_num::Num;
 
-    #[derive(PrimeField)]
+    #[derive(PrimeField,Num)]
     #[PrimeFieldModulus = "70386805592835581672624750593"]
     #[PrimeFieldGenerator = "17"]
     #[PrimeFieldReprEndianness = "little"]
     pub struct Ft([u64; 2]);
-
-    impl num_traits::Num for Ft {
-        type FromStrRadixErr = std::num::ParseIntError;
-
-        fn from_str_radix(s: &str, r: u32) -> Result<Self, Self::FromStrRadixErr> {
-            use std::ops::{AddAssign, MulAssign};
-
-            if s.is_empty() {
-                return Err(u32::from_str_radix(s, r).err().unwrap());
-            }
-
-            if s == "0" {
-                return Ok(<Self as Field>::zero());
-            }
-
-            let mut res = Self::zero();
-            let radix = Self::from(u64::from(r));
-            let mut first_digit = true;
-            for c in s.chars() {
-                match c.to_digit(r) {
-                    Some(c) => {
-                        if first_digit {
-                            if c == 0 {
-                                return Err(u32::from_str_radix("3", 2).err().unwrap());
-                            }
-                            first_digit = false;
-                        }
-
-                        res.mul_assign(&radix);
-                        res.add_assign(Self::from(u64::from(c)));
-                    }
-                    None => {
-                        return Err(u32::from_str_radix("3",2).err().unwrap());
-                    }
-                }
-            }
-            Ok(res)
-        }
-    }
-
-    impl num_traits::Zero for Ft {
-        fn zero() -> Self {
-            <Self as Field>::zero()
-        }
-
-        fn is_zero(&self) -> bool {
-            <Self as Field>::is_zero(self)
-        }
-    }
-
-    impl num_traits::One for Ft {
-        fn one() -> Self {
-            <Self as Field>::one()
-        }
-
-        fn is_one(&self) -> bool {
-            self == &<Self as Field>::one()
-        }
-    }
-
-    impl std::ops::Div for Ft {
-        type Output = Ft;
-
-        #[must_use]
-        fn div(self, rhs: Self) -> Ft {
-            self * rhs.invert().unwrap()
-        }
-    }
-
-    impl std::ops::Rem for Ft {
-        type Output = Ft;
-
-        #[must_use]
-        fn rem(self, rhs: Self) -> Ft {
-            if rhs.is_zero() {
-                panic!("divide by zero");
-            }
-
-            Self::zero()
-        }
-    }
-
-    impl num_traits::ops::mul_add::MulAdd for Ft {
-        type Output = Ft;
-
-        fn mul_add(mut self, a: Self, b: Self) -> Ft {
-            self *= &a;
-            self += &b;
-            self
-        }
-    }
 }
 
 #[test]
