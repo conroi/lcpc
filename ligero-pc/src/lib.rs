@@ -32,6 +32,11 @@ where
     type F = Ft;
     type Err = FFTError;
 
+    const LABEL_DT: &'static [u8] = b"ligero-pc//DT";
+    const LABEL_PR: &'static [u8] = b"ligero-pc//PR";
+    const LABEL_PE: &'static [u8] = b"ligero-pc//PE";
+    const LABEL_CO: &'static [u8] = b"ligero-pc//CO";
+
     fn encode<T: AsMut<[Ft]>>(inp: T) -> Result<(), FFTError> {
         <Ft as FieldFFT>::fft_io(inp)
     }

@@ -59,6 +59,15 @@ pub trait LcEncoding: Clone + std::fmt::Debug + serde::Serialize {
     /// Field over which coefficients are defined
     type F: Field + FieldHash + std::fmt::Debug + Clone + serde::Serialize;
 
+    /// Domain separation label - degree test (suggested: b"<ENCODING_NAME>//DT")
+    const LABEL_DT: &'static [u8];
+    /// Domain separation label - random lin combs (suggested: b"<ENCODING_NAME>//PR")
+    const LABEL_PR: &'static [u8];
+    /// Domain separation label - eval comb (suggested: b"<ENCODING_NAME>//PE")
+    const LABEL_PE: &'static [u8];
+    /// Domain separation label - column openings (suggested: b"<ENCODING_NAME>//CO")
+    const LABEL_CO: &'static [u8];
+
     /// Error type for encoding
     type Err: std::fmt::Debug + std::error::Error + Send;
 
@@ -669,7 +678,7 @@ where
     for i in 0..n_degree_tests {
         let rand_tensor: Vec<FldT<E>> = {
             let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
-            tr.challenge_bytes(b"ligero-pc//eval//degree_test", &mut key);
+            tr.challenge_bytes(E::LABEL_DT, &mut key);
             let mut deg_test_rng = ChaCha20Rng::from_seed(key);
             // XXX(optimization) could expand seed in parallel instead of in series
             repeat_with(|| FldT::<E>::random(&mut deg_test_rng))
@@ -691,18 +700,18 @@ where
         // step 1c: push p_random and p_eval into transcript
         proof.p_random_vec[i]
             .iter()
-            .for_each(|coeff| coeff.transcript_update(tr, b"ligero-pc//eval//p_random"));
+            .for_each(|coeff| coeff.transcript_update(tr, E::LABEL_PR));
     }
 
     proof
         .p_eval
         .iter()
-        .for_each(|coeff| coeff.transcript_update(tr, b"ligero-pc//eval//p_eval"));
+        .for_each(|coeff| coeff.transcript_update(tr, E::LABEL_PE));
 
     // step 1d: extract columns to open
     let cols_to_open: Vec<usize> = {
         let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
-        tr.challenge_bytes(b"ligero-pc//eval//cols_to_open", &mut key);
+        tr.challenge_bytes(E::LABEL_CO, &mut key);
         let mut cols_rng = ChaCha20Rng::from_seed(key);
         // XXX(optimization) could expand seed in parallel instead of in series
         let col_range = Uniform::new(0usize, n_cols);
@@ -841,7 +850,7 @@ where
     for _i in 0..n_degree_tests {
         let p_random = {
             let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
-            tr.challenge_bytes(b"ligero-pc//eval//degree_test", &mut key);
+            tr.challenge_bytes(E::LABEL_DT, &mut key);
             let mut deg_test_rng = ChaCha20Rng::from_seed(key);
             // XXX(optimization) could expand seed in parallel instead of in series
             let rand_tensor: Vec<FldT<E>> = repeat_with(|| FldT::<E>::random(&mut deg_test_rng))
@@ -861,7 +870,7 @@ where
         // add p_random to the transcript
         p_random
             .iter()
-            .for_each(|coeff| coeff.transcript_update(tr, b"ligero-pc//eval//p_random"));
+            .for_each(|coeff| coeff.transcript_update(tr, E::LABEL_PR));
 
         p_random_vec.push(p_random);
     }
@@ -882,14 +891,14 @@ where
     // add p_eval to the transcript
     p_eval
         .iter()
-        .for_each(|coeff| coeff.transcript_update(tr, b"ligero-pc//eval//p_eval"));
+        .for_each(|coeff| coeff.transcript_update(tr, E::LABEL_PE));
 
     // now extract the column numbers to open
     // XXX(F-S) should we do this column-by-column, updating the transcript for each???
     //          It doesn't seem necessary to me...
     let columns: Vec<LcColumn<D, E>> = {
         let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
-        tr.challenge_bytes(b"ligero-pc//eval//cols_to_open", &mut key);
+        tr.challenge_bytes(E::LABEL_CO, &mut key);
         let mut cols_rng = ChaCha20Rng::from_seed(key);
         // XXX(optimization) could expand seed in parallel instead of in series
         let col_range = Uniform::new(0usize, comm.n_cols);
