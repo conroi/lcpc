@@ -7,7 +7,7 @@
 // This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use super::{FieldHash, LcCommit, LcEncoding};
+use super::{def_labels, FieldHash, LcCommit, LcEncoding};
 
 use digest::Output;
 use err_derive::Error;
@@ -58,10 +58,7 @@ where
     type F = Ft;
     type Err = FFTError;
 
-    const LABEL_DT: &'static [u8] = b"lcpc2d-test//DT";
-    const LABEL_PR: &'static [u8] = b"lcpc2d-test//PR";
-    const LABEL_PE: &'static [u8] = b"lcpc2d-test//PE";
-    const LABEL_CO: &'static [u8] = b"lcpc2d-test//CO";
+    def_labels!(lcpc2d_test);
 
     fn encode<T: AsMut<[Ft]>>(inp: T) -> Result<(), FFTError> {
         <Ft as FieldFFT>::fft_io(inp)

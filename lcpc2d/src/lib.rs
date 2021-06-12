@@ -25,6 +25,8 @@ use rayon::prelude::*;
 use serde::Serialize;
 use std::iter::repeat_with;
 
+mod macros;
+
 #[cfg(test)]
 mod tests;
 
@@ -59,13 +61,13 @@ pub trait LcEncoding: Clone + std::fmt::Debug + serde::Serialize {
     /// Field over which coefficients are defined
     type F: Field + FieldHash + std::fmt::Debug + Clone + serde::Serialize;
 
-    /// Domain separation label - degree test (suggested: b"<ENCODING_NAME>//DT")
+    /// Domain separation label - degree test (see def_labels!())
     const LABEL_DT: &'static [u8];
-    /// Domain separation label - random lin combs (suggested: b"<ENCODING_NAME>//PR")
+    /// Domain separation label - random lin combs (see def_labels!())
     const LABEL_PR: &'static [u8];
-    /// Domain separation label - eval comb (suggested: b"<ENCODING_NAME>//PE")
+    /// Domain separation label - eval comb (see def_labels!())
     const LABEL_PE: &'static [u8];
-    /// Domain separation label - column openings (suggested: b"<ENCODING_NAME>//CO")
+    /// Domain separation label - column openings (see def_labels!())
     const LABEL_CO: &'static [u8];
 
     /// Error type for encoding

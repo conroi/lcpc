@@ -13,7 +13,7 @@ ligero-pc is a polynomial commitment based on R-S codes, from Ligero
 */
 
 use fffft::{FFTError, FieldFFT};
-use lcpc2d::{FieldHash, LcCommit, LcEncoding, LcEvalProof};
+use lcpc2d::{def_labels, FieldHash, LcCommit, LcEncoding, LcEvalProof};
 use serde::Serialize;
 
 #[cfg(test)]
@@ -32,10 +32,7 @@ where
     type F = Ft;
     type Err = FFTError;
 
-    const LABEL_DT: &'static [u8] = b"ligero-pc//DT";
-    const LABEL_PR: &'static [u8] = b"ligero-pc//PR";
-    const LABEL_PE: &'static [u8] = b"ligero-pc//PE";
-    const LABEL_CO: &'static [u8] = b"ligero-pc//CO";
+    def_labels!(ligero_pc);
 
     fn encode<T: AsMut<[Ft]>>(inp: T) -> Result<(), FFTError> {
         <Ft as FieldFFT>::fft_io(inp)
