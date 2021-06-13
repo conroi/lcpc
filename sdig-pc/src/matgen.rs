@@ -19,7 +19,7 @@ use sprs::{CsMat, TriMat};
 use std::collections::HashSet;
 
 // minimum dimension, at which point we just switch to R-S
-const MIN_DIM: usize = 128;
+const LOG_MIN_DIM: usize = 7;
 // alpha = 0.32
 const ALPHA_NUM: usize = 8;
 const ALPHA_DEN: usize = 25;
@@ -39,7 +39,7 @@ const D1: usize = 7;
 // row density of postcodes
 const D2: usize = 10;
 
-fn ceil_div(n: usize, num: usize, den: usize) -> usize {
+const fn ceil_mul(n: usize, num: usize, den: usize) -> usize {
     (n * num + den - 1) / den
 }
 
@@ -61,7 +61,8 @@ where
         .enumerate()
         .map(|(i, (&(ni, mi), &(nip, mip)))| {
             let (precode, mut rng) = precode_and_rng(seed, i, ni, mi);
-            let postcode = gen_postcode::<F, _>(nip, mip, &mut rng);
+            let postcode = gen_code(nip, mip, D2, &mut rng).transpose_into();
+            assert!(postcode.is_csc()); // because of transpose_into
             (precode, postcode)
         })
         .collect_into_vec(&mut ret);
@@ -77,15 +78,16 @@ where
 {
     let mut rng = ChaCha20Rng::seed_from_u64(seed);
     rng.set_stream(i as u64);
-    let precode = gen_precode::<F, _>(ni, mi, &mut rng);
+    let precode = gen_code(ni, mi, D1, &mut rng).transpose_into();
     assert!(precode.is_csc()); // because of transpose_into
-    assert!(precode.transpose_view().is_csr());
     (precode, rng)
 }
 
 // compute dimensions for all of the matrices used by this code
 #[allow(clippy::type_complexity)]
 fn get_dims(n: usize) -> (Vec<(usize, usize)>, Vec<(usize, usize)>) {
+    const MIN_DIM: usize = ((1 << LOG_MIN_DIM) * K_NUM) / K_DEN;
+
     // if n is small enough, there are no matrices
     if n <= MIN_DIM {
         return (Vec::new(), Vec::new());
@@ -93,11 +95,11 @@ fn get_dims(n: usize) -> (Vec<(usize, usize)>, Vec<(usize, usize)>) {
 
     // figure out dimensions for the precode and postcode matrices
     let pre_dims = {
-        let mut tmp: Vec<_> = iterate(n, |&ni| ceil_div(ni, ALPHA_NUM, ALPHA_DEN))
+        let mut tmp: Vec<_> = iterate(n, |&ni| ceil_mul(ni, ALPHA_NUM, ALPHA_DEN))
             .take_while(|&ni| ni > MIN_DIM)
             .collect();
         if let Some(&ni) = tmp.last() {
-            let last = ceil_div(ni, ALPHA_NUM, ALPHA_DEN);
+            let last = ceil_mul(ni, ALPHA_NUM, ALPHA_DEN);
             assert!(last <= MIN_DIM);
             tmp.push(last);
         }
@@ -111,33 +113,14 @@ fn get_dims(n: usize) -> (Vec<(usize, usize)>, Vec<(usize, usize)>) {
     let post_dims = pre_dims
         .iter()
         .map(|&(ni, mi)| {
-            let niprime = ni + ceil_div(mi, K_NUM, K_DEN);
-            let miprime = ceil_div(ni, K_NUM, K_DEN);
+            let niprime = ni + ceil_mul(mi, K_NUM, K_DEN);
+            let miprime = ceil_mul(ni, K_NUM, K_DEN);
             (niprime, miprime)
         })
         .collect::<Vec<(usize, usize)>>();
     assert_eq!(pre_dims.len(), post_dims.len());
 
     (pre_dims, post_dims)
-}
-
-// generate a postcode of a given size
-fn gen_postcode<F, R>(n: usize, m: usize, rng: R) -> CsMat<F>
-where
-    F: Field + Num,
-    R: Rng,
-{
-    gen_code(n, m, D2, rng).transpose_into()
-}
-
-// generate a postcode of a given size WITHOUT CHECKING
-// NOTE: must use check_seed to make sure precode is OK!
-fn gen_precode<F, R>(n: usize, m: usize, rng: R) -> CsMat<F>
-where
-    F: Field + Num,
-    R: Rng,
-{
-    gen_code(n, m, D1, rng).transpose_into()
 }
 
 /// check that a given seed will generate a reasonable code for this dimension and field
