@@ -19,7 +19,8 @@ use sprs::{CsMat, TriMat};
 use std::collections::HashSet;
 
 // minimum dimension, at which point we just switch to R-S
-const LOG_MIN_DIM: usize = 7;
+pub(super) const LOG_MIN_DIM: usize = 7;
+pub(super) const LOG_RS_RATE_INV: usize = 0;
 // alpha = 0.32
 const ALPHA_NUM: usize = 8;
 const ALPHA_DEN: usize = 25;
@@ -113,7 +114,15 @@ fn get_dims(n: usize) -> (Vec<(usize, usize)>, Vec<(usize, usize)>) {
     let post_dims = pre_dims
         .iter()
         .map(|&(ni, mi)| {
-            let niprime = ni + ceil_mul(mi, K_NUM, K_DEN);
+            // for the last postcode matrix, adjust #rows to accommodate
+            // (1<<LOG_MIN_DIM)-length R-S codeword
+            let niprime = ni
+                + if mi <= MIN_DIM {
+                    // XXX(rsw) should the R-S rate be bigger, like 4?
+                    1 << (LOG_MIN_DIM + LOG_RS_RATE_INV)
+                } else {
+                    ceil_mul(mi, K_NUM, K_DEN)
+                };
             let miprime = ceil_mul(ni, K_NUM, K_DEN);
             (niprime, miprime)
         })
