@@ -57,9 +57,9 @@ pub trait FieldHash {
 }
 
 /// Trait for a linear encoding used by the polycommit
-pub trait LcEncoding: Clone + std::fmt::Debug + serde::Serialize {
+pub trait LcEncoding: Clone + std::fmt::Debug {
     /// Field over which coefficients are defined
-    type F: Field + FieldHash + std::fmt::Debug + Clone + serde::Serialize;
+    type F: Field + FieldHash + std::fmt::Debug + Clone + Serialize;
 
     /// Domain separation label - degree test (see def_labels!())
     const LABEL_DT: &'static [u8];
@@ -227,11 +227,11 @@ where
 
 /// A column opening and the corresponding Merkle path.
 #[derive(Debug, Clone, Serialize)]
-pub struct WrappedLcColumn<E>
+pub struct WrappedLcColumn<F>
 where
-    E: LcEncoding,
+    F: Serialize,
 {
-    col: Vec<FldT<E>>,
+    col: Vec<F>,
     path: Vec<WrappedOutput>,
 }
 
@@ -241,7 +241,7 @@ where
     E: LcEncoding,
 {
     // used locally to hash columns into the transcript
-    fn wrapped(&self) -> WrappedLcColumn<E> {
+    fn wrapped(&self) -> WrappedLcColumn<FldT<E>> {
         let path_wrapped = (0..self.path.len())
             .map(|i| WrappedOutput {
                 bytes: self.path[i].to_vec(),
@@ -255,7 +255,7 @@ where
     }
 
     /// unwrap WrappedLcColumn
-    pub fn unwrapped(inp: &WrappedLcColumn<E>) -> LcColumn<D, E> {
+    pub fn unwrapped(inp: &WrappedLcColumn<FldT<E>>) -> LcColumn<D, E> {
         let path_unwrapped = (0..inp.path.len())
             .map(|_i| <Output<D> as Default>::default())
             .collect();
@@ -282,14 +282,14 @@ where
 
 /// An evaluation and proof of its correctness and of the low-degreeness of the commitment.
 #[derive(Debug, Clone, Serialize)]
-pub struct WrappedLcEvalProof<E>
+pub struct WrappedLcEvalProof<F>
 where
-    E: LcEncoding,
+    F: Serialize,
 {
     n_cols: usize,
-    p_eval: Vec<FldT<E>>,
-    p_random_vec: Vec<Vec<FldT<E>>>,
-    columns: Vec<WrappedLcColumn<E>>,
+    p_eval: Vec<F>,
+    p_random_vec: Vec<Vec<F>>,
+    columns: Vec<WrappedLcColumn<F>>,
 }
 
 // used locally to hash columns into the transcript
@@ -299,7 +299,7 @@ where
     E: LcEncoding,
 {
     /// wrapped method
-    pub fn wrapped(&self) -> WrappedLcEvalProof<E> {
+    pub fn wrapped(&self) -> WrappedLcEvalProof<FldT<E>> {
         let columns_wrapped = (0..self.columns.len())
             .map(|i| self.columns[i].wrapped())
             .collect();
@@ -313,7 +313,7 @@ where
     }
 
     /// unwrapped method
-    pub fn unwrapped(inp: &WrappedLcEvalProof<E>) -> LcEvalProof<D, E> {
+    pub fn unwrapped(inp: &WrappedLcEvalProof<FldT<E>>) -> LcEvalProof<D, E> {
         let columns_unwrapped = (0..inp.columns.len())
             .map(|i| LcColumn::unwrapped(&inp.columns[i]))
             .collect();

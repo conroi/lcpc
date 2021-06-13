@@ -46,14 +46,14 @@ mod ft {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug)]
 struct LigeroEncoding<Ft> {
     _p: std::marker::PhantomData<Ft>,
 }
 
 impl<Ft> LcEncoding for LigeroEncoding<Ft>
 where
-    Ft: FieldFFT + FieldHash + serde::Serialize,
+    Ft: FieldFFT + FieldHash + Serialize,
 {
     type F = Ft;
     type Err = FFTError;
