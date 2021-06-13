@@ -12,10 +12,10 @@
 use ff::Field;
 use itertools::iterate;
 use num_traits::Num;
-use rand::{Rng, SeedableRng};
+use rand::{distributions::Uniform, Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use rayon::prelude::*;
-use sprs::{CsMat, TriMat};
+use sprs::CsMat;
 use std::collections::HashSet;
 
 // minimum dimension, at which point we just switch to R-S
@@ -62,8 +62,7 @@ where
         .enumerate()
         .map(|(i, (&(ni, mi), &(nip, mip)))| {
             let (precode, mut rng) = precode_and_rng(seed, i, ni, mi);
-            let postcode = gen_code(nip, mip, D2, &mut rng).transpose_into();
-            assert!(postcode.is_csc()); // because of transpose_into
+            let postcode = gen_code(nip, mip, D2, &mut rng);
             (precode, postcode)
         })
         .collect_into_vec(&mut ret);
@@ -79,8 +78,7 @@ where
 {
     let mut rng = ChaCha20Rng::seed_from_u64(seed);
     rng.set_stream(i as u64);
-    let precode = gen_code(ni, mi, D1, &mut rng).transpose_into();
-    assert!(precode.is_csc()); // because of transpose_into
+    let precode = gen_code(ni, mi, D1, &mut rng);
     (precode, rng)
 }
 
@@ -141,7 +139,7 @@ where
 
     pre_dims[..].iter().enumerate().all(|(i, &(ni, mi))| {
         let (precode, _) = precode_and_rng(seed, i, ni, mi);
-        check_precode::<F>(precode.transpose_into())
+        check_precode::<F>(precode)
     })
 }
 
@@ -150,10 +148,10 @@ fn check_precode<F>(pc_cand: CsMat<F>) -> bool
 where
     F: Field + Num,
 {
-    assert!(pc_cand.is_csr());
-    let mut row_indices = Vec::with_capacity(pc_cand.rows());
+    // cols because pc_cand is transposed
+    let mut row_indices = Vec::with_capacity(pc_cand.cols());
 
-    // go through each row, checking and collecting nonzero indices
+    // go through each row (column, really) checking and collecting nonzero indices
     for row_vec in pc_cand.outer_iterator() {
         let row_ind_set = row_vec.indices().iter().cloned().collect::<HashSet<_>>();
         // requirement 1: each row needs at least 2 nonzero columns
@@ -186,21 +184,41 @@ where
     F: Field + Num,
     R: Rng,
 {
-    let mut tmat = TriMat::new((n, m));
-    for i in 0..n {
+    let dist = Uniform::new(0, m);
+    let mut data = Vec::<F>::with_capacity(d * n);
+    let mut idxs = Vec::<usize>::with_capacity(d * n);
+    let mut ptrs = Vec::<usize>::with_capacity(1 + n);
+    ptrs.push(0); // ptrs always starts with 0
+
+    for _ in 0..n {
         // for each row, generate D2 random nonzero columns (with replacement)
-        for _ in 0..d {
-            let col = rng.gen_range(0..m);
+        let cols = {
+            let mut tmp = (&mut rng).sample_iter(&dist).take(d).collect::<Vec<_>>();
+            tmp.sort_unstable();
+            tmp
+        };
+
+        // sample random elements for each column
+        let mut last = m + 1;
+        for &col in &cols[..] {
+            // detect and skip repeats
+            if col == last {
+                continue;
+            }
+            last = col;
+
             let val = {
                 let mut tmp = F::random(&mut rng);
-                // almost certainly will never happen...
                 while <F as Field>::is_zero(&tmp) {
                     tmp = F::random(&mut rng);
                 }
                 tmp
             };
-            tmat.add_triplet(i, col, val);
+            idxs.push(col);
+            data.push(val);
         }
+        ptrs.push(data.len());
     }
-    tmat.to_csr()
+
+    CsMat::new_csc((m, n), ptrs, idxs, data)
 }
