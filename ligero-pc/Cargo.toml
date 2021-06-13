@@ -10,7 +10,7 @@ repository = "https://github.com/kwantam/lcpc"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-fffft = "0.3"
+fffft = "0.4"
 lcpc2d = { path = "../lcpc2d" }
 serde = { version = "1.0", features = ["derive"] }
 

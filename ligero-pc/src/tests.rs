@@ -7,7 +7,7 @@
 // This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use super::LigeroCommit;
+use super::{LigeroCommit, LigeroEncoding};
 
 use ff::Field;
 use ft::*;
@@ -39,12 +39,32 @@ mod ft {
 }
 
 #[test]
+fn get_dims() {
+    let mut rng = rand::thread_rng();
+
+    for _ in 0..128 {
+        let lgl = 8 + rng.gen::<usize>() % 8;
+        for _ in 0..128 {
+            let len_base = 1 << (lgl - 1);
+            let len = len_base + (rng.gen::<usize>() % len_base);
+            let rho = rng.gen_range(0.001f64..1f64);
+            let (n_rows, n_per_row, n_cols) = LigeroEncoding::<Ft>::_get_dims(len, rho).unwrap();
+            assert!(n_rows * n_per_row >= len);
+            assert!((n_rows - 1) * n_per_row < len);
+            assert!(n_per_row as f64 / rho <= n_cols as f64);
+            assert!(LigeroEncoding::<Ft>::_dims_ok(n_per_row, n_cols, rho));
+        }
+    }
+}
+
+#[test]
 fn end_to_end() {
     // commit to a random polynomial at a random rate
     let (coeffs, rho) = random_coeffs_rho();
     let n_degree_tests = 2;
     let n_col_opens = 128usize;
-    let comm = LigeroCommit::<Sha3_256, _>::commit(&coeffs, rho).unwrap();
+    let enc = LigeroEncoding::new(coeffs.len(), rho);
+    let comm = LigeroCommit::<Sha3_256, _>::commit(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root().unwrap();
 
@@ -71,7 +91,13 @@ fn end_to_end() {
     tr1.append_message(b"rate", &rho.to_be_bytes()[..]);
     tr1.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
     let pf = comm
-        .prove(&outer_tensor[..], n_degree_tests, n_col_opens, &mut tr1)
+        .prove(
+            &outer_tensor[..],
+            &enc,
+            n_degree_tests,
+            n_col_opens,
+            &mut tr1,
+        )
         .unwrap();
 
     // verify it and finish evaluation
@@ -79,11 +105,12 @@ fn end_to_end() {
     tr2.append_message(b"polycommit", root.as_ref());
     tr2.append_message(b"rate", &rho.to_be_bytes()[..]);
     tr2.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
+    let enc2 = LigeroEncoding::new_from_dims(pf.get_n_per_row(), pf.get_n_cols());
     pf.verify(
         &root,
         &outer_tensor[..],
         &inner_tensor[..],
-        rho,
+        &enc2,
         n_degree_tests,
         n_col_opens,
         &mut tr2,
@@ -97,7 +124,8 @@ fn end_to_end_two_proofs() {
     let (coeffs, rho) = random_coeffs_rho();
     let n_degree_tests = 1;
     let n_col_opens = 128usize;
-    let comm = LigeroCommit::<Sha3_256, _>::commit(&coeffs, rho).unwrap();
+    let enc = LigeroEncoding::new(coeffs.len(), rho);
+    let comm = LigeroCommit::<Sha3_256, _>::commit(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root().unwrap();
 
@@ -124,7 +152,13 @@ fn end_to_end_two_proofs() {
     tr1.append_message(b"rate", &rho.to_be_bytes()[..]);
     tr1.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
     let pf = comm
-        .prove(&outer_tensor[..], n_degree_tests, n_col_opens, &mut tr1)
+        .prove(
+            &outer_tensor[..],
+            &enc,
+            n_degree_tests,
+            n_col_opens,
+            &mut tr1,
+        )
         .unwrap();
 
     let challenge_after_first_proof_prover = {
@@ -139,7 +173,13 @@ fn end_to_end_two_proofs() {
     tr1.append_message(b"rate", &rho.to_be_bytes()[..]);
     tr1.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
     let pf2 = comm
-        .prove(&outer_tensor[..], n_degree_tests, n_col_opens, &mut tr1)
+        .prove(
+            &outer_tensor[..],
+            &enc,
+            n_degree_tests,
+            n_col_opens,
+            &mut tr1,
+        )
         .unwrap();
 
     // verify it and finish evaluation
@@ -147,12 +187,13 @@ fn end_to_end_two_proofs() {
     tr2.append_message(b"polycommit", root.as_ref());
     tr2.append_message(b"rate", &rho.to_be_bytes()[..]);
     tr2.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
+    let enc2 = LigeroEncoding::new_from_dims(pf.get_n_per_row(), pf.get_n_cols());
     let res = pf
         .verify(
             &root,
             &outer_tensor[..],
             &inner_tensor[..],
-            rho,
+            &enc2,
             n_degree_tests,
             n_col_opens,
             &mut tr2,
@@ -174,12 +215,13 @@ fn end_to_end_two_proofs() {
     tr2.append_message(b"polycommit", root.as_ref());
     tr2.append_message(b"rate", &rho.to_be_bytes()[..]);
     tr2.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
+    let enc3 = LigeroEncoding::new_from_dims(pf2.get_n_per_row(), pf2.get_n_cols());
     let res2 = pf2
         .verify(
             &root,
             &outer_tensor[..],
             &inner_tensor[..],
-            rho,
+            &enc3,
             n_degree_tests,
             n_col_opens,
             &mut tr2,

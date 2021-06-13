@@ -7,12 +7,11 @@
 // This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use super::{def_labels, FieldHash, LcCommit, LcEncoding};
+use super::{def_labels, FieldHash, LcCommit, LcEncoding, ProverError, ProverResult};
 
 use digest::Output;
-use err_derive::Error;
 use ff::Field;
-use fffft::{FFTError, FieldFFT};
+use fffft::{FFTError, FFTPrecomp, FieldFFT};
 use ft::*;
 use itertools::iterate;
 use merlin::Transcript;
@@ -22,9 +21,6 @@ use rand_chacha::ChaCha20Rng;
 use serde::Serialize;
 use sha3::Sha3_256;
 use std::iter::repeat_with;
-
-#[derive(Debug, Error)]
-enum DummyError {}
 
 mod ft {
     use crate::FieldHash;
@@ -48,7 +44,60 @@ mod ft {
 
 #[derive(Clone, Debug)]
 struct LigeroEncoding<Ft> {
-    _p: std::marker::PhantomData<Ft>,
+    rho: f64,
+    pc: FFTPrecomp<Ft>,
+}
+
+impl<Ft> LigeroEncoding<Ft>
+where
+    Ft: FieldFFT,
+{
+    fn _get_dims(len: usize, rho: f64) -> Option<(usize, usize, usize)> {
+        assert!(rho > 0f64);
+        assert!(rho < 1f64);
+
+        // compute #cols, which must be a power of 2 because of FFT
+        let nc = (((len as f64).sqrt() / rho).ceil() as usize)
+            .checked_next_power_of_two()
+            .and_then(|nc| {
+                if nc > (1 << <Ft as FieldFFT>::S) {
+                    None
+                } else {
+                    Some(nc)
+                }
+            })?;
+
+        // minimize nr subject to #cols and rho
+        let np = ((nc as f64) * rho).floor() as usize;
+        let nr = len / np + (len % np != 0) as usize;
+        assert!(np * nr >= len);
+        assert!(np * (nr - 1) < len);
+
+        Some((nr, np, nc))
+    }
+
+    fn _dims_ok(n_per_row: usize, n_cols: usize, rho: f64) -> bool {
+        let rate = n_cols as f64 * rho >= n_per_row as f64;
+        let pow = n_cols.is_power_of_two();
+
+        rate && pow
+    }
+
+    pub fn new(len: usize, rho: f64) -> Self {
+        let (_, n_per_row, n_cols) = Self::_get_dims(len, rho).unwrap();
+        let pc = <Ft as FieldFFT>::precomp_fft(n_cols).unwrap();
+        assert!(Self::_dims_ok(n_per_row, n_cols, rho));
+        Self { rho, pc }
+    }
+
+    pub fn new_from_dims(n_per_row: usize, n_cols: usize) -> Self {
+        assert!(n_per_row < n_cols);
+        // very approximate rate - make sure it will pass dims_ok
+        let rho = (n_per_row + 1) as f64 / n_cols as f64;
+        let pc = <Ft as FieldFFT>::precomp_fft(n_cols).unwrap();
+        assert!(Self::_dims_ok(n_per_row, n_cols, rho));
+        Self { rho, pc }
+    }
 }
 
 impl<Ft> LcEncoding for LigeroEncoding<Ft>
@@ -60,8 +109,19 @@ where
 
     def_labels!(lcpc2d_test);
 
-    fn encode<T: AsMut<[Ft]>>(inp: T) -> Result<(), FFTError> {
-        <Ft as FieldFFT>::fft_io(inp)
+    fn encode<T: AsMut<[Ft]>>(&self, inp: T) -> Result<(), FFTError> {
+        <Ft as FieldFFT>::fft_io_pc(inp, &self.pc)
+    }
+
+    fn get_dims(&self, len: usize) -> ProverResult<(usize, usize, usize), Self::Err> {
+        Self::_get_dims(len, self.rho).ok_or(ProverError::TooBig)
+    }
+
+    fn dims_ok(&self, n_per_row: usize, n_cols: usize) -> bool {
+        let ok = Self::_dims_ok(n_per_row, n_cols, self.rho);
+        let pc = n_cols == (1 << self.pc.get_log_len());
+
+        ok && pc
     }
 }
 
@@ -77,34 +137,14 @@ fn log2() {
 }
 
 #[test]
-fn get_dims() {
-    use super::get_dims;
-
-    let mut rng = rand::thread_rng();
-
-    for _ in 0..128 {
-        let lgl = 8 + rng.gen::<usize>() % 8;
-        for _ in 0..128 {
-            let len_base = 1 << (lgl - 1);
-            let len = len_base + (rng.gen::<usize>() % len_base);
-            let rho = rng.gen_range(0.001f64..1f64);
-            let (n_rows, n_per_row, n_cols) = get_dims::<DummyError>(len, rho).unwrap();
-            assert!(n_rows * n_per_row >= len);
-            assert!((n_rows - 1) * n_per_row < len);
-            assert!(n_per_row as f64 / rho <= n_cols as f64);
-        }
-    }
-}
-
-#[test]
 fn merkleize() {
     use super::{merkleize, merkleize_ser};
 
     let mut test_comm = random_comm();
     let mut test_comm_2 = test_comm.clone();
 
-    merkleize(&mut test_comm).unwrap();
-    merkleize_ser(&mut test_comm_2).unwrap();
+    merkleize(&mut test_comm);
+    merkleize_ser(&mut test_comm_2);
 
     assert_eq!(&test_comm.comm, &test_comm_2.comm);
     assert_eq!(&test_comm.coeffs, &test_comm_2.coeffs);
@@ -135,7 +175,7 @@ fn open_column() {
 
     let test_comm = {
         let mut tmp = random_comm();
-        merkleize(&mut tmp).unwrap();
+        merkleize(&mut tmp);
         tmp
     };
 
@@ -158,7 +198,8 @@ fn commit() {
     use super::{commit, eval_outer, eval_outer_fft};
 
     let (coeffs, rho) = random_coeffs_rho();
-    let comm = commit::<Sha3_256, LigeroEncoding<_>>(&coeffs, rho).unwrap();
+    let enc = LigeroEncoding::<Ft>::new(coeffs.len(), rho);
+    let comm = commit::<Sha3_256, LigeroEncoding<_>>(&coeffs, &enc).unwrap();
 
     let x = Ft::random(&mut rand::thread_rng());
 
@@ -201,9 +242,10 @@ fn end_to_end() {
 
     // commit to a random polynomial at a random rate
     let (coeffs, rho) = random_coeffs_rho();
+    let enc = LigeroEncoding::<Ft>::new(coeffs.len(), rho);
     let n_degree_tests = 2;
     let n_col_opens = 128usize;
-    let comm = commit::<Sha3_256, LigeroEncoding<_>>(&coeffs, rho).unwrap();
+    let comm = commit::<Sha3_256, LigeroEncoding<_>>(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root().unwrap();
 
@@ -235,6 +277,7 @@ fn end_to_end() {
     let pf = prove::<Sha3_256, _>(
         &comm,
         &outer_tensor[..],
+        &enc,
         n_degree_tests,
         n_col_opens,
         &mut tr1,
@@ -246,12 +289,13 @@ fn end_to_end() {
     tr2.append_message(b"polycommit", root.as_ref());
     tr2.append_message(b"rate", &rho.to_be_bytes()[..]);
     tr2.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
+    let enc2 = LigeroEncoding::<Ft>::new_from_dims(pf.get_n_per_row(), pf.get_n_cols());
     let res = verify(
         &root,
         &outer_tensor[..],
         &inner_tensor[..],
         &pf,
-        rho,
+        &enc2,
         n_degree_tests,
         n_col_opens,
         &mut tr2,
@@ -267,9 +311,10 @@ fn end_to_end_two_proofs() {
 
     // commit to a random polynomial at a random rate
     let (coeffs, rho) = random_coeffs_rho();
+    let enc = LigeroEncoding::<Ft>::new(coeffs.len(), rho);
     let n_degree_tests = 1;
     let n_col_opens = 128usize;
-    let comm = commit::<Sha3_256, LigeroEncoding<_>>(&coeffs, rho).unwrap();
+    let comm = commit::<Sha3_256, LigeroEncoding<_>>(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root().unwrap();
 
@@ -301,6 +346,7 @@ fn end_to_end_two_proofs() {
     let pf = prove::<Sha3_256, _>(
         &comm,
         &outer_tensor[..],
+        &enc,
         n_degree_tests,
         n_col_opens,
         &mut tr1,
@@ -321,6 +367,7 @@ fn end_to_end_two_proofs() {
     let pf2 = prove::<Sha3_256, _>(
         &comm,
         &outer_tensor[..],
+        &enc,
         n_degree_tests,
         n_col_opens,
         &mut tr1,
@@ -332,12 +379,13 @@ fn end_to_end_two_proofs() {
     tr2.append_message(b"polycommit", root.as_ref());
     tr2.append_message(b"rate", &rho.to_be_bytes()[..]);
     tr2.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
+    let enc2 = LigeroEncoding::<Ft>::new_from_dims(pf.get_n_per_row(), pf.get_n_cols());
     let res = verify(
         &root,
         &outer_tensor[..],
         &inner_tensor[..],
         &pf,
-        rho,
+        &enc2,
         n_degree_tests,
         n_col_opens,
         &mut tr2,
@@ -360,12 +408,13 @@ fn end_to_end_two_proofs() {
     tr2.append_message(b"polycommit", root.as_ref());
     tr2.append_message(b"rate", &rho.to_be_bytes()[..]);
     tr2.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
+    let enc3 = LigeroEncoding::<Ft>::new_from_dims(pf2.get_n_per_row(), pf2.get_n_cols());
     let res2 = verify(
         &root,
         &outer_tensor[..],
         &inner_tensor[..],
         &pf2,
-        rho,
+        &enc3,
         n_degree_tests,
         n_col_opens,
         &mut tr2,
@@ -389,15 +438,13 @@ fn random_coeffs_rho() -> (Vec<Ft>, f64) {
 }
 
 fn random_comm() -> LigeroCommit<Sha3_256, Ft> {
-    use super::get_dims;
-
     let mut rng = rand::thread_rng();
 
     let lgl = 8 + rng.gen::<usize>() % 8;
     let len_base = 1 << (lgl - 1);
     let len = len_base + (rng.gen::<usize>() % len_base);
     let rho = rng.gen_range(0.1f64..0.9f64);
-    let (n_rows, n_per_row, n_cols) = get_dims::<DummyError>(len, rho).unwrap();
+    let (n_rows, n_per_row, n_cols) = LigeroEncoding::<Ft>::_get_dims(len, rho).unwrap();
 
     let coeffs_len = (n_per_row - 1) * n_rows + 1 + (rng.gen::<usize>() % n_rows);
     let coeffs = {
@@ -416,7 +463,6 @@ fn random_comm() -> LigeroCommit<Sha3_256, Ft> {
     LigeroCommit::<Sha3_256, Ft> {
         comm,
         coeffs,
-        rho,
         n_rows,
         n_cols,
         n_per_row,

@@ -57,7 +57,7 @@ pub trait FieldHash {
 }
 
 /// Trait for a linear encoding used by the polycommit
-pub trait LcEncoding: Clone + std::fmt::Debug {
+pub trait LcEncoding: Clone + std::fmt::Debug + Sync {
     /// Field over which coefficients are defined
     type F: Field + FieldHash + std::fmt::Debug + Clone + Serialize;
 
@@ -74,7 +74,13 @@ pub trait LcEncoding: Clone + std::fmt::Debug {
     type Err: std::fmt::Debug + std::error::Error + Send;
 
     /// Encoding function
-    fn encode<T: AsMut<[Self::F]>>(inp: T) -> Result<(), Self::Err>;
+    fn encode<T: AsMut<[Self::F]>>(&self, inp: T) -> Result<(), Self::Err>;
+
+    /// Compute optimal dimensions for this encoding
+    fn get_dims(&self, len: usize) -> ProverResult<(usize, usize, usize), Self::Err>;
+
+    /// Check that supplied dimensions are compatible with this encoding
+    fn dims_ok(&self, n_per_row: usize, n_cols: usize) -> bool;
 }
 
 // local accessors for enclosed types
@@ -87,11 +93,8 @@ pub enum ProverError<ErrT>
 where
     ErrT: std::fmt::Debug + std::error::Error + 'static,
 {
-    /// bad rho value
-    #[error(display = "bad rho value --- must be between 0 and 1")]
-    Rho,
     /// size too big
-    #[error(display = "size is too big (n_cols overflowed). increase rho?")]
+    #[error(display = "n_cols is too large for this encoding")]
     TooBig,
     /// error encoding a vector
     #[error(display = "encoding error: {:?}", _0)]
@@ -116,9 +119,6 @@ pub enum VerifierError<ErrT>
 where
     ErrT: std::fmt::Debug + std::error::Error + 'static,
 {
-    /// bad rho value
-    #[error(display = "bad rho value --- must be between 0 and 1")]
-    Rho,
     /// wrong number of column openings in proof
     #[error(display = "wrong number of column openings in proof")]
     NumColOpens,
@@ -137,6 +137,9 @@ where
     /// bad inner tensor
     #[error(display = "inner tensor: wrong size")]
     InnerTensor,
+    /// encoding dimensions do not match proof
+    #[error(display = "encoding dimension mismatch")]
+    EncodingDims,
     /// error encoding a vector
     #[error(display = "encoding error: {:?}", _0)]
     Encode(#[source] ErrT),
@@ -154,7 +157,6 @@ where
 {
     comm: Vec<FldT<E>>,
     coeffs: Vec<FldT<E>>,
-    rho: f64,
     n_rows: usize,
     n_cols: usize,
     n_per_row: usize,
@@ -187,30 +189,31 @@ where
     }
 
     /// generate a commitment to a polynomial
-    pub fn commit(coeffs: &[FldT<E>], rho: f64) -> ProverResult<Self, ErrT<E>> {
-        commit(coeffs, rho)
+    pub fn commit(coeffs: &[FldT<E>], enc: &E) -> ProverResult<Self, ErrT<E>> {
+        commit(coeffs, enc)
     }
 
     /// generate a commitment to a polynomial with explicit dimensions
     pub fn commit_with_dims(
         coeffs_in: &[FldT<E>],
-        rho: f64,
+        enc: &E,
         n_rows: usize,
         n_per_row: usize,
         n_cols: usize,
     ) -> ProverResult<Self, ErrT<E>> {
-        commit_with_dims(coeffs_in, rho, n_rows, n_per_row, n_cols)
+        commit_with_dims(coeffs_in, enc, n_rows, n_per_row, n_cols)
     }
 
     /// Generate an evaluation of a committed polynomial
     pub fn prove(
         &self,
         outer_tensor: &[FldT<E>],
+        enc: &E,
         n_degree_tests: usize,
         n_col_opens: usize,
         tr: &mut Transcript,
     ) -> ProverResult<LcEvalProof<D, E>, ErrT<E>> {
-        prove(self, outer_tensor, n_degree_tests, n_col_opens, tr)
+        prove(self, outer_tensor, enc, n_degree_tests, n_col_opens, tr)
     }
 }
 
@@ -326,6 +329,16 @@ where
         }
     }
 
+    /// Get the number of elements in an encoded vector
+    pub fn get_n_cols(&self) -> usize {
+        self.n_cols
+    }
+
+    /// Get the number of elements in an unencoded vector
+    pub fn get_n_per_row(&self) -> usize {
+        self.p_eval.len()
+    }
+
     /// Verify an evaluation proof and return the resulting evaluation
     #[allow(clippy::too_many_arguments)]
     pub fn verify(
@@ -333,7 +346,7 @@ where
         root: &Output<D>,
         outer_tensor: &[FldT<E>],
         inner_tensor: &[FldT<E>],
-        rho: f64,
+        enc: &E,
         n_degree_tests: usize,
         n_col_opens: usize,
         tr: &mut Transcript,
@@ -343,7 +356,7 @@ where
             outer_tensor,
             inner_tensor,
             self,
-            rho,
+            enc,
             n_degree_tests,
             n_col_opens,
             tr,
@@ -354,20 +367,20 @@ where
 // parallelization limit when working on columns
 const LOG_MIN_NCOLS: usize = 5;
 
-/// Commit to a univariate polynomial whose coefficients are `coeffs` using Reed-Solomon rate `0 < rho < 1`.
-fn commit<D, E>(coeffs: &[FldT<E>], rho: f64) -> ProverResult<LcCommit<D, E>, ErrT<E>>
+/// Commit to a univariate polynomial whose coefficients are `coeffs` using encoding `enc`
+fn commit<D, E>(coeffs: &[FldT<E>], enc: &E) -> ProverResult<LcCommit<D, E>, ErrT<E>>
 where
     D: Digest,
     E: LcEncoding,
 {
-    let (n_rows, n_per_row, n_cols) = get_dims(coeffs.len(), rho)?;
-    commit_with_dims(coeffs, rho, n_rows, n_per_row, n_cols)
+    let (n_rows, n_per_row, n_cols) = enc.get_dims(coeffs.len())?;
+    commit_with_dims(coeffs, enc, n_rows, n_per_row, n_cols)
 }
 
 /// Commit to a polynomial whose coeffs are `coeffs_in` using the given rate and dimensions.
 fn commit_with_dims<D, E>(
     coeffs_in: &[FldT<E>],
-    rho: f64,
+    enc: &E,
     n_rows: usize,
     n_per_row: usize,
     n_cols: usize,
@@ -379,8 +392,7 @@ where
     // check that parameters are ok
     assert!(n_rows * n_per_row >= coeffs_in.len());
     assert!((n_rows - 1) * n_per_row < coeffs_in.len());
-    assert!(n_cols.is_power_of_two());
-    assert!(n_cols as f64 * rho >= n_per_row as f64);
+    assert!(enc.dims_ok(n_per_row, n_cols));
 
     // matrix (encoded as a vector)
     // XXX(zk) pad coeffs
@@ -400,54 +412,29 @@ where
         .zip(coeffs.par_chunks(n_per_row))
         .try_for_each(|(r, c)| {
             r[..c.len()].copy_from_slice(c);
-            <E as LcEncoding>::encode(r)
+            enc.encode(r)
         })?;
 
     // compute Merkle tree
     let mut ret = LcCommit {
         comm,
         coeffs,
-        rho,
         n_rows,
         n_cols,
         n_per_row,
         hashes: vec![<Output<D> as Default>::default(); 2 * n_cols - 1],
     };
-    merkleize(&mut ret)?;
+    check_comm(&ret, enc)?;
+    merkleize(&mut ret);
 
     Ok(ret)
 }
 
-fn get_dims<ErrT>(len: usize, rho: f64) -> ProverResult<(usize, usize, usize), ErrT>
-where
-    ErrT: std::error::Error,
-{
-    if rho <= 0f64 || rho >= 1f64 {
-        return Err(ProverError::<ErrT>::Rho);
-    }
-
-    // compute #cols, which must be a power of 2 because of FFT
-    let nc = (((len as f64).sqrt() / rho).ceil() as usize)
-        .checked_next_power_of_two()
-        .ok_or(ProverError::<ErrT>::TooBig)?;
-
-    // minimize nr subject to #cols and rho
-    let np = ((nc as f64) * rho).floor() as usize;
-    let nr = len / np + (len % np != 0) as usize;
-    assert!(np * nr >= len);
-    assert!(np * (nr - 1) < len);
-
-    Ok((nr, np, nc))
-}
-
-fn merkleize<D, E>(comm: &mut LcCommit<D, E>) -> ProverResult<(), ErrT<E>>
+fn merkleize<D, E>(comm: &mut LcCommit<D, E>)
 where
     D: Digest,
     E: LcEncoding,
 {
-    // make sure commitment is self consistent
-    check_comm(comm)?;
-
     // step 1: hash each column of the commitment (we always reveal a full column)
     let hashes = &mut comm.hashes[..comm.n_cols];
     hash_columns::<D, E>(&comm.comm, hashes, comm.n_rows, comm.n_cols, 0);
@@ -455,18 +442,14 @@ where
     // step 2: compute rest of Merkle tree
     let (hin, hout) = comm.hashes.split_at_mut(comm.n_cols);
     merkle_tree::<D>(hin, hout);
-
-    Ok(())
 }
 
 #[cfg(test)]
-fn merkleize_ser<D, E>(comm: &mut LcCommit<D, E>) -> ProverResult<(), ErrT<E>>
+fn merkleize_ser<D, E>(comm: &mut LcCommit<D, E>)
 where
     D: Digest,
     E: LcEncoding,
 {
-    check_comm(comm)?;
-
     let hashes = &mut comm.hashes;
 
     // hash each column
@@ -492,22 +475,19 @@ where
         ins = new_ins;
         outs = new_outs;
     }
-
-    Ok(())
 }
 
-fn check_comm<D, E>(comm: &LcCommit<D, E>) -> ProverResult<(), ErrT<E>>
+fn check_comm<D, E>(comm: &LcCommit<D, E>, enc: &E) -> ProverResult<(), ErrT<E>>
 where
     D: Digest,
     E: LcEncoding,
 {
     let comm_sz = comm.comm.len() != comm.n_rows * comm.n_cols;
     let coeff_sz = comm.coeffs.len() != comm.n_rows * comm.n_per_row;
-    let rate = comm.n_cols as f64 * comm.rho < comm.n_per_row as f64;
-    let pow = !comm.n_cols.is_power_of_two();
     let hashlen = comm.hashes.len() != 2 * comm.n_cols - 1;
+    let dims = !enc.dims_ok(comm.n_per_row, comm.n_cols);
 
-    if comm_sz || coeff_sz || rate || pow || hashlen {
+    if comm_sz || coeff_sz || hashlen || dims {
         Err(ProverError::Commit)
     } else {
         Ok(())
@@ -646,7 +626,7 @@ fn verify<D, E>(
     outer_tensor: &[FldT<E>],
     inner_tensor: &[FldT<E>],
     proof: &LcEvalProof<D, E>,
-    rho: f64,
+    enc: &E,
     n_degree_tests: usize,
     n_col_opens: usize,
     tr: &mut Transcript,
@@ -660,16 +640,16 @@ where
         return Err(VerifierError::NumColOpens);
     }
     let n_rows = proof.columns[0].col.len();
-    let n_cols = proof.n_cols;
-    let n_per_row = proof.p_eval.len();
+    let n_cols = proof.get_n_cols();
+    let n_per_row = proof.get_n_per_row();
     if inner_tensor.len() != n_per_row {
         return Err(VerifierError::InnerTensor);
     }
     if outer_tensor.len() != n_rows {
         return Err(VerifierError::OuterTensor);
     }
-    if rho <= 0f64 || rho >= 1f64 || n_cols as f64 * rho < n_per_row as f64 {
-        return Err(VerifierError::Rho);
+    if !enc.dims_ok(n_per_row, n_cols) {
+        return Err(VerifierError::EncodingDims);
     }
 
     // step 1: random tensor for degree test and random columns to test
@@ -695,7 +675,7 @@ where
             let mut tmp = Vec::with_capacity(n_cols);
             tmp.extend_from_slice(&proof.p_random_vec[i][..]);
             tmp.resize(n_cols, FldT::<E>::zero());
-            <E as LcEncoding>::encode(&mut tmp)?;
+            enc.encode(&mut tmp)?;
             p_random_fft.push(tmp);
         };
 
@@ -727,7 +707,7 @@ where
         let mut tmp = Vec::with_capacity(n_cols);
         tmp.extend_from_slice(&proof.p_eval[..]);
         tmp.resize(n_cols, FldT::<E>::zero());
-        <E as LcEncoding>::encode(&mut tmp)?;
+        enc.encode(&mut tmp)?;
         tmp
     };
 
@@ -832,6 +812,7 @@ where
 fn prove<D, E>(
     comm: &LcCommit<D, E>,
     outer_tensor: &[FldT<E>],
+    enc: &E,
     n_degree_tests: usize,
     n_col_opens: usize,
     tr: &mut Transcript,
@@ -841,7 +822,7 @@ where
     E: LcEncoding,
 {
     // make sure arguments are well formed
-    check_comm(comm)?;
+    check_comm(comm, enc)?;
     if outer_tensor.len() != comm.n_rows {
         return Err(ProverError::OuterTensor);
     }
@@ -931,8 +912,6 @@ where
     D: Digest,
     E: LcEncoding,
 {
-    // make sure arguments are well formed
-    check_comm(comm)?;
     if tensor.len() != comm.n_rows {
         return Err(ProverError::OuterTensor);
     }
@@ -990,7 +969,6 @@ where
     D: Digest,
     E: LcEncoding,
 {
-    check_comm(comm)?;
     if tensor.len() != comm.n_rows {
         return Err(ProverError::OuterTensor);
     }
@@ -1015,7 +993,6 @@ where
     D: Digest,
     E: LcEncoding,
 {
-    check_comm(comm)?;
     if tensor.len() != comm.n_rows {
         return Err(ProverError::OuterTensor);
     }

@@ -32,5 +32,5 @@ macro_rules! def_labels {
         const LABEL_PR: &'static [u8] = b"$l//PR";
         const LABEL_PE: &'static [u8] = b"$l//PE";
         const LABEL_CO: &'static [u8] = b"$l//CO";
-    }
+    };
 }
