@@ -77,7 +77,7 @@ pub trait LcEncoding: Clone + std::fmt::Debug + Sync {
     fn encode<T: AsMut<[Self::F]>>(&self, inp: T) -> Result<(), Self::Err>;
 
     /// Compute optimal dimensions for this encoding on an input of size `len`
-    fn get_dims(&self, len: usize) -> ProverResult<(usize, usize, usize), Self::Err>;
+    fn get_dims(&self, len: usize) -> (usize, usize, usize);
 
     /// Check that supplied dimensions are compatible with this encoding
     fn dims_ok(&self, n_per_row: usize, n_cols: usize) -> bool;
@@ -369,7 +369,7 @@ where
     D: Digest,
     E: LcEncoding,
 {
-    let (n_rows, n_per_row, n_cols) = enc.get_dims(coeffs_in.len())?;
+    let (n_rows, n_per_row, n_cols) = enc.get_dims(coeffs_in.len());
 
     // check that parameters are ok
     assert!(n_rows * n_per_row >= coeffs_in.len());

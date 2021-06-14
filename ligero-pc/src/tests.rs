@@ -52,7 +52,7 @@ fn get_dims() {
             assert!(n_rows * n_per_row >= len);
             assert!((n_rows - 1) * n_per_row < len);
             assert!(n_per_row as f64 / rho <= n_cols as f64);
-            assert!(LigeroEncoding::<Ft>::_dims_ok(n_per_row, n_cols, rho));
+            assert!(LigeroEncoding::<Ft>::_dims_ok(n_per_row, n_cols));
         }
     }
 }
