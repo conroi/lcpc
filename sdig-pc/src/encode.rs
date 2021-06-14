@@ -9,8 +9,6 @@
 
 /*! encode a vector of length n using an expander code */
 
-use super::matgen::RS_LEN;
-
 use ff::Field;
 use fffft::{FFTError, FFTPrecomp, FieldFFT};
 use ndarray::{linalg::Dot, ArrayView};
@@ -20,6 +18,7 @@ use sprs::{CsMat, MulAcc};
 /// encode a vector given a code of corresponding length
 pub fn encode<F, T, R, E>(
     mut xi: T,
+    baselen: usize,
     precodes: &[CsMat<F>],
     postcodes: &[CsMat<F>],
     mut rs: R,
@@ -50,9 +49,9 @@ where
             intermeds.push(res);
         } else {
             // base case: reed-solomon
-            assert!(res.len() < RS_LEN);
-            let mut res = rs(res, RS_LEN)?;
-            assert_eq!(res.len(), RS_LEN);
+            assert!(res.len() < baselen);
+            let mut res = rs(res, baselen)?;
+            assert_eq!(res.len(), baselen);
             intermeds[i].append(&mut res);
         }
     }
@@ -74,6 +73,7 @@ where
     Ok(())
 }
 
+/// Compute Reed-Solomon encoding using Vandermonde matrix
 pub fn reed_solomon<F>(xi: Vec<F>, len: usize) -> Result<Vec<F>, std::io::Error>
 where
     F: Field,
@@ -90,6 +90,7 @@ where
     Ok(res)
 }
 
+/// Compute Reed-Solomon encoding using FFT
 pub fn reed_solomon_fft<F>(
     mut xi: Vec<F>,
     len: usize,

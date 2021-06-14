@@ -18,10 +18,6 @@ use rayon::prelude::*;
 use sprs::CsMat;
 use std::collections::HashSet;
 
-// minimum dimension, at which point we just switch to R-S
-const LOG_MIN_DIM: usize = 7;
-const LOG_RS_RATE_INV: usize = 0;
-pub(super) const RS_LEN: usize = 1 << (LOG_MIN_DIM + LOG_RS_RATE_INV);
 // alpha = 0.32
 const ALPHA_NUM: usize = 8;
 const ALPHA_DEN: usize = 25;
@@ -46,12 +42,11 @@ const fn ceil_mul(n: usize, num: usize, den: usize) -> usize {
 }
 
 /// Generate a random code from a given seed
-// XXX(rsw) we can't possibly need a cryptographically strong seed, can we???
-pub fn generate<F>(n: usize, seed: u64) -> (Vec<CsMat<F>>, Vec<CsMat<F>>)
+pub fn generate<F>(n: usize, baselen: usize, seed: u64) -> (Vec<CsMat<F>>, Vec<CsMat<F>>)
 where
     F: Field + Num,
 {
-    let (pre_dims, post_dims) = get_dims(n);
+    let (pre_dims, post_dims) = get_dims(n, baselen);
     if pre_dims.is_empty() {
         return (Vec::new(), Vec::new());
     }
@@ -86,23 +81,19 @@ where
 
 // compute dimensions for all of the matrices used by this code
 #[allow(clippy::type_complexity)]
-fn get_dims(n: usize) -> (Vec<(usize, usize)>, Vec<(usize, usize)>) {
-    const MIN_DIM: usize = ((1 << LOG_MIN_DIM) * K_DEN) / K_NUM;
-
-    // if n is small enough, there are no matrices
-    if n <= MIN_DIM {
-        return (Vec::new(), Vec::new());
-    }
+fn get_dims(n: usize, baselen: usize) -> (Vec<(usize, usize)>, Vec<(usize, usize)>) {
+    let min_dim = (baselen * K_DEN) / K_NUM;
+    assert!(n > min_dim);
 
     // figure out dimensions for the precode and postcode matrices
     let pre_dims = {
         let mut tmp: Vec<_> = iterate(n, |&ni| ceil_mul(ni, ALPHA_NUM, ALPHA_DEN))
-            .take_while(|&ni| ni > MIN_DIM)
+            .take_while(|&ni| ni > min_dim)
             .collect();
         if let Some(&ni) = tmp.last() {
             let last = ceil_mul(ni, ALPHA_NUM, ALPHA_DEN);
-            assert!(last <= MIN_DIM);
-            assert!(ceil_mul(last, K_NUM, K_DEN) <= (1 << LOG_MIN_DIM));
+            assert!(last <= min_dim);
+            assert!(ceil_mul(last, K_NUM, K_DEN) <= baselen);
             tmp.push(last);
         }
         assert!(tmp.len() > 1);
@@ -116,10 +107,10 @@ fn get_dims(n: usize) -> (Vec<(usize, usize)>, Vec<(usize, usize)>) {
         .iter()
         .map(|&(ni, mi)| {
             // for the last postcode matrix, adjust #rows to accommodate
-            // (1<<LOG_MIN_DIM)-length R-S codeword
+            // baselen-length R-S codeword
             let niprime = ni
-                + if mi <= MIN_DIM {
-                    RS_LEN
+                + if mi <= min_dim {
+                    baselen
                 } else {
                     ceil_mul(mi, K_NUM, K_DEN)
                 };
@@ -133,11 +124,11 @@ fn get_dims(n: usize) -> (Vec<(usize, usize)>, Vec<(usize, usize)>) {
 }
 
 /// check that a given seed will generate a reasonable code for this dimension and field
-pub fn check_seed<F>(n: usize, seed: u64) -> bool
+pub fn check_seed<F>(n: usize, baselen: usize, seed: u64) -> bool
 where
     F: Field + Num,
 {
-    let (pre_dims, _) = get_dims(n);
+    let (pre_dims, _) = get_dims(n, baselen);
 
     pre_dims[..].iter().enumerate().all(|(i, &(ni, mi))| {
         let (precode, _) = precode_and_rng(seed, i, ni, mi);
@@ -193,7 +184,7 @@ where
     ptrs.push(0); // ptrs always starts with 0
 
     for _ in 0..n {
-        // for each row, generate D2 random nonzero columns (with replacement)
+        // for each row, generate d random nonzero columns (with replacement)
         let cols = {
             let mut tmp = (&mut rng).sample_iter(&dist).take(d).collect::<Vec<_>>();
             tmp.sort_unstable();
