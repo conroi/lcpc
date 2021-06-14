@@ -268,6 +268,9 @@ where
             path: path_unwrapped,
         }
     }
+
+    // XXX(rsw) add into_wrapped and into_unwrapped
+    // XXX(rsw) sohuldn't unwrapped be a method on WrappedLcColumn???
 }
 
 /// An evaluation and proof of its correctness and of the low-degreeness of the commitment.
@@ -301,7 +304,7 @@ where
     D: Digest,
     E: LcEncoding,
 {
-    /// wrapped method
+    /// make a serializable clone of an LcEvalProof
     pub fn wrapped(&self) -> WrappedLcEvalProof<FldT<E>> {
         let columns_wrapped = (0..self.columns.len())
             .map(|i| self.columns[i].wrapped())
@@ -315,7 +318,7 @@ where
         }
     }
 
-    /// unwrapped method
+    /// turn a WrappedLcEvalProof into an LcEvalProof
     pub fn unwrapped(inp: &WrappedLcEvalProof<FldT<E>>) -> LcEvalProof<D, E> {
         let columns_unwrapped = (0..inp.columns.len())
             .map(|i| LcColumn::unwrapped(&inp.columns[i]))
@@ -328,6 +331,9 @@ where
             columns: columns_unwrapped,
         }
     }
+
+    // XXX(rsw) add into_wrapped and into_unwrapped
+    // XXX(rsw) sohuldn't unwrapped be a method on WrappedLcEvalProof???
 
     /// Get the number of elements in an encoded vector
     pub fn get_n_cols(&self) -> usize {
