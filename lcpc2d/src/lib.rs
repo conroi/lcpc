@@ -76,7 +76,7 @@ pub trait LcEncoding: Clone + std::fmt::Debug + Sync {
     /// Encoding function
     fn encode<T: AsMut<[Self::F]>>(&self, inp: T) -> Result<(), Self::Err>;
 
-    /// Compute optimal dimensions for this encoding
+    /// Compute optimal dimensions for this encoding on an input of size `len`
     fn get_dims(&self, len: usize) -> ProverResult<(usize, usize, usize), Self::Err>;
 
     /// Check that supplied dimensions are compatible with this encoding
@@ -191,17 +191,6 @@ where
     /// generate a commitment to a polynomial
     pub fn commit(coeffs: &[FldT<E>], enc: &E) -> ProverResult<Self, ErrT<E>> {
         commit(coeffs, enc)
-    }
-
-    /// generate a commitment to a polynomial with explicit dimensions
-    pub fn commit_with_dims(
-        coeffs_in: &[FldT<E>],
-        enc: &E,
-        n_rows: usize,
-        n_per_row: usize,
-        n_cols: usize,
-    ) -> ProverResult<Self, ErrT<E>> {
-        commit_with_dims(coeffs_in, enc, n_rows, n_per_row, n_cols)
     }
 
     /// Generate an evaluation of a committed polynomial
@@ -375,27 +364,13 @@ const LOG_MIN_NCOLS: usize = 5;
 
 /// Commit to a univariate polynomial whose coefficients are `coeffs` using encoding `enc`
 // XXX(rsw) maybe LcEncoding stores more info about dims to avoid redundancy?
-fn commit<D, E>(coeffs: &[FldT<E>], enc: &E) -> ProverResult<LcCommit<D, E>, ErrT<E>>
+fn commit<D, E>(coeffs_in: &[FldT<E>], enc: &E) -> ProverResult<LcCommit<D, E>, ErrT<E>>
 where
     D: Digest,
     E: LcEncoding,
 {
-    let (n_rows, n_per_row, n_cols) = enc.get_dims(coeffs.len())?;
-    commit_with_dims(coeffs, enc, n_rows, n_per_row, n_cols)
-}
+    let (n_rows, n_per_row, n_cols) = enc.get_dims(coeffs_in.len())?;
 
-/// Commit to a polynomial whose coeffs are `coeffs_in` using the given rate and dimensions.
-fn commit_with_dims<D, E>(
-    coeffs_in: &[FldT<E>],
-    enc: &E,
-    n_rows: usize,
-    n_per_row: usize,
-    n_cols: usize,
-) -> ProverResult<LcCommit<D, E>, ErrT<E>>
-where
-    D: Digest,
-    E: LcEncoding,
-{
     // check that parameters are ok
     assert!(n_rows * n_per_row >= coeffs_in.len());
     assert!((n_rows - 1) * n_per_row < coeffs_in.len());
