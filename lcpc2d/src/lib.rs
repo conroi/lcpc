@@ -363,7 +363,6 @@ where
 const LOG_MIN_NCOLS: usize = 5;
 
 /// Commit to a univariate polynomial whose coefficients are `coeffs` using encoding `enc`
-// XXX(rsw) maybe LcEncoding stores more info about dims to avoid redundancy?
 fn commit<D, E>(coeffs_in: &[FldT<E>], enc: &E) -> ProverResult<LcCommit<D, E>, ErrT<E>>
 where
     D: Digest,
