@@ -12,6 +12,7 @@
 sdig-pc is a polynomial commitment scheme from the SDIG expander code
 */
 
+pub mod encode;
 pub mod matgen;
 
 #[cfg(test)]

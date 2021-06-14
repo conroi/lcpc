@@ -8,6 +8,7 @@
 // except according to those terms.
 
 use ff::Field;
+use fffft::FieldFFT;
 use ft::*;
 use ndarray::{linalg::Dot, Array};
 use rand::{thread_rng, Rng};
@@ -70,7 +71,7 @@ fn test_matgen_check_seed() {
     let mut rng = thread_rng();
     use super::matgen::check_seed;
 
-    let n = 256usize + (rng.gen::<usize>() % 4096usize);
+    let n = 256usize + (rng.gen::<usize>() % 4096);
     for seed in 0..1024u64 {
         if check_seed::<Ft>(n, seed) {
             println!("Seed {} was good for n={}", seed, n);
@@ -78,4 +79,27 @@ fn test_matgen_check_seed() {
         }
     }
     panic!("did not find a good seed");
+}
+
+#[test]
+fn test_matgen_encode() {
+    let mut rng = thread_rng();
+    use super::encode::{encode, reed_solomon, reed_solomon_fft};
+    use super::matgen::{generate, RS_LEN};
+
+    let n = 256usize + (rng.gen::<usize>() % 4096);
+    let (precodes, postcodes) = generate(n, 0u64);
+
+    let xi_len = precodes[0].cols() + postcodes[0].rows();
+    let mut xi = Vec::with_capacity(xi_len);
+    for _ in 0..xi_len {
+        xi.push(Ft::random(&mut rng));
+    }
+    encode(&mut xi, &precodes, &postcodes, reed_solomon).unwrap();
+
+    let pc = <Ft as FieldFFT>::precomp_fft(RS_LEN).unwrap();
+    encode(&mut xi, &precodes, &postcodes, |x, l| {
+        reed_solomon_fft(x, l, &pc)
+    })
+    .unwrap();
 }

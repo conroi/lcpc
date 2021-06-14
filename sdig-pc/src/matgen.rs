@@ -19,8 +19,9 @@ use sprs::CsMat;
 use std::collections::HashSet;
 
 // minimum dimension, at which point we just switch to R-S
-pub(super) const LOG_MIN_DIM: usize = 7;
-pub(super) const LOG_RS_RATE_INV: usize = 0;
+const LOG_MIN_DIM: usize = 7;
+const LOG_RS_RATE_INV: usize = 0;
+pub(super) const RS_LEN: usize = 1 << (LOG_MIN_DIM + LOG_RS_RATE_INV);
 // alpha = 0.32
 const ALPHA_NUM: usize = 8;
 const ALPHA_DEN: usize = 25;
@@ -46,16 +47,17 @@ const fn ceil_mul(n: usize, num: usize, den: usize) -> usize {
 
 /// Generate a random code from a given seed
 // XXX(rsw) we can't possibly need a cryptographically strong seed, can we???
-pub fn generate<F>(n: usize, seed: u64) -> Vec<(CsMat<F>, CsMat<F>)>
+pub fn generate<F>(n: usize, seed: u64) -> (Vec<CsMat<F>>, Vec<CsMat<F>>)
 where
     F: Field + Num,
 {
     let (pre_dims, post_dims) = get_dims(n);
     if pre_dims.is_empty() {
-        return Vec::new();
+        return (Vec::new(), Vec::new());
     }
 
-    let mut ret = Vec::with_capacity(pre_dims.len());
+    let mut precodes = Vec::with_capacity(pre_dims.len());
+    let mut postcodes = Vec::with_capacity(pre_dims.len());
     pre_dims[..]
         .par_iter()
         .zip(&post_dims[..])
@@ -65,9 +67,9 @@ where
             let postcode = gen_code(nip, mip, D2, &mut rng);
             (precode, postcode)
         })
-        .collect_into_vec(&mut ret);
+        .unzip_into_vecs(&mut precodes, &mut postcodes);
 
-    ret
+    (precodes, postcodes)
 }
 
 // this is used in both generate() and check_seed(),
@@ -85,7 +87,7 @@ where
 // compute dimensions for all of the matrices used by this code
 #[allow(clippy::type_complexity)]
 fn get_dims(n: usize) -> (Vec<(usize, usize)>, Vec<(usize, usize)>) {
-    const MIN_DIM: usize = ((1 << LOG_MIN_DIM) * K_NUM) / K_DEN;
+    const MIN_DIM: usize = ((1 << LOG_MIN_DIM) * K_DEN) / K_NUM;
 
     // if n is small enough, there are no matrices
     if n <= MIN_DIM {
@@ -100,6 +102,7 @@ fn get_dims(n: usize) -> (Vec<(usize, usize)>, Vec<(usize, usize)>) {
         if let Some(&ni) = tmp.last() {
             let last = ceil_mul(ni, ALPHA_NUM, ALPHA_DEN);
             assert!(last <= MIN_DIM);
+            assert!(ceil_mul(last, K_NUM, K_DEN) <= (1 << LOG_MIN_DIM));
             tmp.push(last);
         }
         assert!(tmp.len() > 1);
@@ -116,8 +119,7 @@ fn get_dims(n: usize) -> (Vec<(usize, usize)>, Vec<(usize, usize)>) {
             // (1<<LOG_MIN_DIM)-length R-S codeword
             let niprime = ni
                 + if mi <= MIN_DIM {
-                    // XXX(rsw) should the R-S rate be bigger, like 4?
-                    1 << (LOG_MIN_DIM + LOG_RS_RATE_INV)
+                    RS_LEN
                 } else {
                     ceil_mul(mi, K_NUM, K_DEN)
                 };

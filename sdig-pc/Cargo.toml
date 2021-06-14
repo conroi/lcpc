@@ -11,7 +11,9 @@ repository = "https://github.com/kwantam/lcpc"
 
 [dependencies]
 ff = "0.10"
+fffft = "0.4"
 itertools = "0.10"
+ndarray = ">=0.11.0,<0.15"
 num-traits = "0.2"
 rand = "0.8"
 rand_chacha = "0.3"
@@ -23,7 +25,6 @@ bitvec = "0.22"
 byteorder = "1"
 ff = { version = "0.10", features = ["derive"] }
 ff-derive-num = "0.1"
-ndarray = ">=0.11.0,<0.15"
 num-traits = "0.2"
 rand_core = "0.6"
 subtle = "2.2"
