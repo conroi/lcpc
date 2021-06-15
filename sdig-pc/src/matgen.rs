@@ -41,7 +41,7 @@ const fn ceil_mul(n: usize, num: usize, den: usize) -> usize {
     (n * num + den - 1) / den
 }
 
-/// Generate a random code from a given seed
+/// Generate a random code from a given seed with a base codeword length of `baselen`
 pub fn generate<F>(n: usize, baselen: usize, seed: u64) -> (Vec<CsMat<F>>, Vec<CsMat<F>>)
 where
     F: Field + Num,

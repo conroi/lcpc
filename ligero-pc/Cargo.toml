@@ -12,7 +12,7 @@ repository = "https://github.com/kwantam/lcpc"
 [dependencies]
 fffft = "0.4"
 lcpc2d = { path = "../lcpc2d" }
-serde = { version = "1.0", features = ["derive"] }
+serde = "1.0"
 
 [dev-dependencies]
 bitvec = "0.22"
