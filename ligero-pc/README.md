@@ -1,20 +1,17 @@
-# lcpc
+# ligero-pc
 
-Polynomial commitment scheme from any linear code with sufficient minimum distance.
+Polynomial commitment scheme based on [Ligero].
 
-# repo layout
+## bibilography
 
-- `lcpc2d` - "2-dimensional" polynomial commitment parameterized by a linear code
+Ames, Hazay, Ishai, Venkitasubramaniam. "Ligero: Lightweight sublinear
+arguments without a trusted setup." Proc. ACM CCS, 2017. PDF: [Ligero]
 
-- `ligero-pc` - an R-S--based encoding for use with `lcpc2d`
-
-- `sdig-pc` - an expander-based encoding for use with `lcpc2d`
-
-- `doc` - misc documentation
+[Ligero]: https://acmccs.github.io/papers/p2087-amesA.pdf
 
 ## license
 
-    Copyright 2021 Riad S. Wahby and lcpc authors
+    Copyright 2020 Riad S. Wahby
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
