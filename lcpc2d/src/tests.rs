@@ -7,7 +7,7 @@
 // This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use super::{def_labels, FieldHash, LcCommit, LcEncoding};
+use super::{def_labels, FieldHash, LcCommit, LcEncoding, LcEvalProof, LcRoot};
 
 use digest::Output;
 use ff::Field;
@@ -18,16 +18,15 @@ use merlin::Transcript;
 use rand::Rng;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
-use serde::Serialize;
 use sha3::Sha3_256;
 use std::iter::repeat_with;
 
 mod ft {
     use crate::FieldHash;
     use ff::PrimeField;
-    use serde::Serialize;
+    use serde::{Deserialize, Serialize};
 
-    #[derive(PrimeField, Serialize)]
+    #[derive(PrimeField, Serialize, Deserialize)]
     #[PrimeFieldModulus = "70386805592835581672624750593"]
     #[PrimeFieldGenerator = "17"]
     #[PrimeFieldReprEndianness = "little"]
@@ -108,7 +107,7 @@ where
 
 impl<Ft> LcEncoding for LigeroEncoding<Ft>
 where
-    Ft: FieldFFT + FieldHash + Serialize,
+    Ft: FieldFFT + FieldHash,
 {
     type F = Ft;
     type Err = FFTError;
@@ -134,6 +133,8 @@ where
 }
 
 type LigeroCommit<D, F> = LcCommit<D, LigeroEncoding<F>>;
+
+type LigeroEvalProof<D, F> = LcEvalProof<D, LigeroEncoding<F>>;
 
 #[test]
 fn log2() {
@@ -187,14 +188,14 @@ fn open_column() {
         tmp
     };
 
-    let root = test_comm.get_root().unwrap();
+    let root = test_comm.get_root();
     for _ in 0..64 {
         let col_num = rng.gen::<usize>() % test_comm.n_cols;
         let column = open_column(&test_comm, col_num).unwrap();
         assert!(verify_column::<Sha3_256, _>(
             &column,
             col_num,
-            &root,
+            root.as_ref(),
             &[],
             &Ft::zero(),
         ));
@@ -255,7 +256,7 @@ fn end_to_end() {
     let n_col_opens = 128usize;
     let comm = commit::<Sha3_256, LigeroEncoding<_>>(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
-    let root = comm.get_root().unwrap();
+    let root = comm.get_root();
 
     // evaluate the random polynomial we just generated at a random point x
     let x = Ft::random(&mut rand::thread_rng());
@@ -282,7 +283,7 @@ fn end_to_end() {
     tr1.append_message(b"polycommit", root.as_ref());
     tr1.append_message(b"rate", &rho.to_be_bytes()[..]);
     tr1.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
-    let pf = prove::<Sha3_256, _>(
+    let pf: LigeroEvalProof<Sha3_256, Ft> = prove(
         &comm,
         &outer_tensor[..],
         &enc,
@@ -290,6 +291,12 @@ fn end_to_end() {
         n_col_opens,
         &mut tr1,
     )
+    .unwrap();
+    let encoded: Vec<u8> = bincode::serialize(&pf).unwrap();
+    let encroot: Vec<u8> = bincode::serialize(&LcRoot::<Sha3_256, LigeroEncoding<Ft>> {
+        root: *root.as_ref(),
+        _p: Default::default(),
+    })
     .unwrap();
 
     // verify it and finish evaluation
@@ -299,7 +306,7 @@ fn end_to_end() {
     tr2.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
     let enc2 = LigeroEncoding::<Ft>::new_from_dims(pf.get_n_per_row(), pf.get_n_cols());
     let res = verify(
-        &root,
+        root.as_ref(),
         &outer_tensor[..],
         &inner_tensor[..],
         &pf,
@@ -310,7 +317,27 @@ fn end_to_end() {
     )
     .unwrap();
 
+    let root2 = bincode::deserialize::<LcRoot<Sha3_256, LigeroEncoding<Ft>>>(&encroot[..]).unwrap();
+    let pf2: LigeroEvalProof<Sha3_256, Ft> = bincode::deserialize(&encoded[..]).unwrap();
+    let mut tr3 = Transcript::new(b"test transcript");
+    tr3.append_message(b"polycommit", root.as_ref());
+    tr3.append_message(b"rate", &rho.to_be_bytes()[..]);
+    tr3.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
+    let enc3 = LigeroEncoding::<Ft>::new_from_dims(pf2.get_n_per_row(), pf2.get_n_cols());
+    let res2 = verify(
+        root2.as_ref(),
+        &outer_tensor[..],
+        &inner_tensor[..],
+        &pf2,
+        &enc3,
+        n_degree_tests,
+        n_col_opens,
+        &mut tr3,
+    )
+    .unwrap();
+
     assert_eq!(res, eval);
+    assert_eq!(res, res2);
 }
 
 #[test]
@@ -324,7 +351,7 @@ fn end_to_end_two_proofs() {
     let n_col_opens = 128usize;
     let comm = commit::<Sha3_256, LigeroEncoding<_>>(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
-    let root = comm.get_root().unwrap();
+    let root = comm.get_root();
 
     // evaluate the random polynomial we just generated at a random point x
     let x = Ft::random(&mut rand::thread_rng());
@@ -389,7 +416,7 @@ fn end_to_end_two_proofs() {
     tr2.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
     let enc2 = LigeroEncoding::<Ft>::new_from_dims(pf.get_n_per_row(), pf.get_n_cols());
     let res = verify(
-        &root,
+        root.as_ref(),
         &outer_tensor[..],
         &inner_tensor[..],
         &pf,
@@ -418,7 +445,7 @@ fn end_to_end_two_proofs() {
     tr2.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
     let enc3 = LigeroEncoding::<Ft>::new_from_dims(pf2.get_n_per_row(), pf2.get_n_cols());
     let res2 = verify(
-        &root,
+        root.as_ref(),
         &outer_tensor[..],
         &inner_tensor[..],
         &pf2,

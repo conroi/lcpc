@@ -131,7 +131,7 @@ fn end_to_end_one_proof() {
     let enc = SdigEncoding::new(coeffs.len(), 0);
     let comm = SdigCommit::<Sha3_256, _>::commit(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
-    let root = comm.get_root().unwrap();
+    let root = comm.get_root();
 
     // evaluate the random polynomial we just generated at a random point x
     let x = Ft::random(&mut rand::thread_rng());
@@ -170,7 +170,7 @@ fn end_to_end_one_proof() {
     tr2.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
     let enc2 = SdigEncoding::new_from_dims(pf.get_n_per_row(), pf.get_n_cols(), 0);
     pf.verify(
-        &root,
+        root.as_ref(),
         &outer_tensor[..],
         &inner_tensor[..],
         &enc2,
@@ -190,7 +190,7 @@ fn end_to_end_two_proofs() {
     let enc = SdigEncoding::new(coeffs.len(), 1);
     let comm = SdigCommit::<Sha3_256, _>::commit(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
-    let root = comm.get_root().unwrap();
+    let root = comm.get_root();
 
     // evaluate the random polynomial we just generated at a random point x
     let x = Ft::random(&mut rand::thread_rng());
@@ -250,7 +250,7 @@ fn end_to_end_two_proofs() {
     let enc2 = SdigEncoding::new_from_dims(pf.get_n_per_row(), pf.get_n_cols(), 1);
     let res = pf
         .verify(
-            &root,
+            root.as_ref(),
             &outer_tensor[..],
             &inner_tensor[..],
             &enc2,
@@ -277,7 +277,7 @@ fn end_to_end_two_proofs() {
     let enc3 = SdigEncoding::new_from_dims(pf2.get_n_per_row(), pf2.get_n_cols(), 1);
     let res2 = pf2
         .verify(
-            &root,
+            root.as_ref(),
             &outer_tensor[..],
             &inner_tensor[..],
             &enc3,
@@ -299,7 +299,7 @@ fn fft_end_to_end_one_proof() {
     let enc = SdigFFTEncoding::new(coeffs.len(), 2);
     let comm = SdigFFTCommit::<Sha3_256, _>::commit(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
-    let root = comm.get_root().unwrap();
+    let root = comm.get_root();
 
     // evaluate the random polynomial we just generated at a random point x
     let x = Ft::random(&mut rand::thread_rng());
@@ -338,7 +338,7 @@ fn fft_end_to_end_one_proof() {
     tr2.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
     let enc2 = SdigFFTEncoding::new_from_dims(pf.get_n_per_row(), pf.get_n_cols(), 2);
     pf.verify(
-        &root,
+        root.as_ref(),
         &outer_tensor[..],
         &inner_tensor[..],
         &enc2,
@@ -358,7 +358,7 @@ fn fft_end_to_end_two_proofs() {
     let enc = SdigFFTEncoding::new(coeffs.len(), 3);
     let comm = SdigFFTCommit::<Sha3_256, _>::commit(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
-    let root = comm.get_root().unwrap();
+    let root = comm.get_root();
 
     // evaluate the random polynomial we just generated at a random point x
     let x = Ft::random(&mut rand::thread_rng());
@@ -418,7 +418,7 @@ fn fft_end_to_end_two_proofs() {
     let enc2 = SdigFFTEncoding::new_from_dims(pf.get_n_per_row(), pf.get_n_cols(), 3);
     let res = pf
         .verify(
-            &root,
+            root.as_ref(),
             &outer_tensor[..],
             &inner_tensor[..],
             &enc2,
@@ -445,7 +445,7 @@ fn fft_end_to_end_two_proofs() {
     let enc3 = SdigFFTEncoding::new_from_dims(pf2.get_n_per_row(), pf2.get_n_cols(), 3);
     let res2 = pf2
         .verify(
-            &root,
+            root.as_ref(),
             &outer_tensor[..],
             &inner_tensor[..],
             &enc3,

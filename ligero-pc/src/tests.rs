@@ -66,7 +66,7 @@ fn end_to_end() {
     let enc = LigeroEncoding::new(coeffs.len(), rho);
     let comm = LigeroCommit::<Sha3_256, _>::commit(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
-    let root = comm.get_root().unwrap();
+    let root = comm.get_root();
 
     // evaluate the random polynomial we just generated at a random point x
     let x = Ft::random(&mut rand::thread_rng());
@@ -107,7 +107,7 @@ fn end_to_end() {
     tr2.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
     let enc2 = LigeroEncoding::new_from_dims(pf.get_n_per_row(), pf.get_n_cols());
     pf.verify(
-        &root,
+        root.as_ref(),
         &outer_tensor[..],
         &inner_tensor[..],
         &enc2,
@@ -127,7 +127,7 @@ fn end_to_end_two_proofs() {
     let enc = LigeroEncoding::new(coeffs.len(), rho);
     let comm = LigeroCommit::<Sha3_256, _>::commit(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
-    let root = comm.get_root().unwrap();
+    let root = comm.get_root();
 
     // evaluate the random polynomial we just generated at a random point x
     let x = Ft::random(&mut rand::thread_rng());
@@ -190,7 +190,7 @@ fn end_to_end_two_proofs() {
     let enc2 = LigeroEncoding::new_from_dims(pf.get_n_per_row(), pf.get_n_cols());
     let res = pf
         .verify(
-            &root,
+            root.as_ref(),
             &outer_tensor[..],
             &inner_tensor[..],
             &enc2,
@@ -218,7 +218,7 @@ fn end_to_end_two_proofs() {
     let enc3 = LigeroEncoding::new_from_dims(pf2.get_n_per_row(), pf2.get_n_cols());
     let res2 = pf2
         .verify(
-            &root,
+            root.as_ref(),
             &outer_tensor[..],
             &inner_tensor[..],
             &enc3,

@@ -22,20 +22,13 @@ use rand::{
 };
 use rand_chacha::ChaCha20Rng;
 use rayon::prelude::*;
-use serde::Serialize;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::iter::repeat_with;
 
 mod macros;
 
 #[cfg(test)]
 mod tests;
-
-/// A type to wrap Output<D>
-#[derive(Debug, Clone, Serialize)]
-pub struct WrappedOutput {
-    /// wrapped output
-    pub bytes: Vec<u8>,
-}
 
 /// Trait for a field element that can be hashed via [digest::Digest]
 pub trait FieldHash {
@@ -59,7 +52,7 @@ pub trait FieldHash {
 /// Trait for a linear encoding used by the polycommit
 pub trait LcEncoding: Clone + std::fmt::Debug + Sync {
     /// Field over which coefficients are defined
-    type F: Field + FieldHash + std::fmt::Debug + Clone + Serialize;
+    type F: Field + FieldHash + std::fmt::Debug + Clone;
 
     /// Domain separation label - degree test (see def_labels!())
     const LABEL_DT: &'static [u8];
@@ -169,8 +162,11 @@ where
     E: LcEncoding,
 {
     /// returns the Merkle root of this polynomial commitment (which is the commitment itself)
-    pub fn get_root(&self) -> Option<Output<D>> {
-        self.hashes.last().cloned()
+    pub fn get_root(&self) -> LcRoot<D, E> {
+        LcRoot {
+            root: self.hashes.last().cloned().unwrap(),
+            _p: Default::default(),
+        }
     }
 
     /// return the number of coefficients encoded in each matrix row
@@ -206,6 +202,91 @@ where
     }
 }
 
+/// A Merkle root corresponding to a committed polynomial
+#[derive(Debug, Clone)]
+pub struct LcRoot<D, E>
+where
+    D: Digest,
+    E: LcEncoding,
+{
+    root: Output<D>,
+    _p: std::marker::PhantomData<E>,
+}
+
+impl<D, E> LcRoot<D, E>
+where
+    D: Digest,
+    E: LcEncoding,
+{
+    fn wrapped(&self) -> WrappedOutput {
+        WrappedOutput {
+            bytes: self.root.to_vec(),
+        }
+    }
+
+    /// Convert this value into a raw Output<D>
+    pub fn into_raw(self) -> Output<D> {
+        self.root
+    }
+}
+
+impl<D, E> AsRef<Output<D>> for LcRoot<D, E>
+where
+    D: Digest,
+    E: LcEncoding,
+{
+    fn as_ref(&self) -> &Output<D> {
+        &self.root
+    }
+}
+
+// support impl for serializing and deserializing proofs
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct WrappedOutput {
+    /// wrapped output
+    #[serde(with = "serde_bytes")]
+    pub bytes: Vec<u8>,
+}
+
+impl WrappedOutput {
+    fn unwrap<D, E>(self) -> LcRoot<D, E>
+    where
+        D: Digest,
+        E: LcEncoding,
+    {
+        LcRoot {
+            root: self.bytes.into_iter().collect::<Output<D>>(),
+            _p: Default::default(),
+        }
+    }
+}
+
+impl<D, E> Serialize for LcRoot<D, E>
+where
+    D: Digest,
+    E: LcEncoding,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.wrapped().serialize(serializer)
+    }
+}
+
+impl<'de, D, E> Deserialize<'de> for LcRoot<D, E>
+where
+    D: Digest,
+    E: LcEncoding,
+{
+    fn deserialize<De>(deserializer: De) -> Result<Self, De::Error>
+    where
+        De: Deserializer<'de>,
+    {
+        Ok(WrappedOutput::deserialize(deserializer)?.unwrap())
+    }
+}
+
 /// A column opening and the corresponding Merkle path.
 #[derive(Debug, Clone)]
 pub struct LcColumn<D, E>
@@ -217,22 +298,12 @@ where
     path: Vec<Output<D>>,
 }
 
-/// A column opening and the corresponding Merkle path.
-#[derive(Debug, Clone, Serialize)]
-pub struct WrappedLcColumn<F>
-where
-    F: Serialize,
-{
-    col: Vec<F>,
-    path: Vec<WrappedOutput>,
-}
-
 impl<D, E> LcColumn<D, E>
 where
     D: Digest,
     E: LcEncoding,
+    E::F: Serialize,
 {
-    // used locally to hash columns into the transcript
     fn wrapped(&self) -> WrappedLcColumn<FldT<E>> {
         let path_wrapped = (0..self.path.len())
             .map(|i| WrappedOutput {
@@ -245,21 +316,65 @@ where
             path: path_wrapped,
         }
     }
+}
 
-    /// unwrap WrappedLcColumn
-    pub fn unwrapped(inp: &WrappedLcColumn<FldT<E>>) -> LcColumn<D, E> {
-        let path_unwrapped = (0..inp.path.len())
-            .map(|_i| <Output<D> as Default>::default())
+// A column opening and the corresponding Merkle path.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct WrappedLcColumn<F>
+where
+    F: Serialize,
+{
+    col: Vec<F>,
+    path: Vec<WrappedOutput>,
+}
+
+impl<F> WrappedLcColumn<F>
+where
+    F: Serialize,
+{
+    /// turn WrappedLcColumn into LcColumn
+    fn unwrap<D, E>(self) -> LcColumn<D, E>
+    where
+        D: Digest,
+        E: LcEncoding<F = F>,
+    {
+        let col = self.col;
+        let path = self
+            .path
+            .into_iter()
+            .map(|v| v.bytes.into_iter().collect::<Output<D>>())
             .collect();
 
-        LcColumn {
-            col: inp.col.clone(),
-            path: path_unwrapped,
-        }
+        LcColumn { col, path }
     }
+}
 
-    // XXX(rsw) add into_wrapped and into_unwrapped
-    // XXX(rsw) sohuldn't unwrapped be a method on WrappedLcColumn???
+impl<D, E> Serialize for LcColumn<D, E>
+where
+    D: Digest,
+    E: LcEncoding,
+    E::F: Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.wrapped().serialize(serializer)
+    }
+}
+
+impl<'de, D, E> Deserialize<'de> for LcColumn<D, E>
+where
+    D: Digest,
+    E: LcEncoding,
+    E::F: Serialize + Deserialize<'de>,
+{
+    fn deserialize<De>(deserializer: De) -> Result<Self, De::Error>
+    where
+        De: Deserializer<'de>,
+    {
+        Ok(WrappedLcColumn::<FldT<E>>::deserialize(deserializer)?.unwrap())
+    }
 }
 
 /// An evaluation and proof of its correctness and of the low-degreeness of the commitment.
@@ -275,55 +390,11 @@ where
     columns: Vec<LcColumn<D, E>>,
 }
 
-/// An evaluation and proof of its correctness and of the low-degreeness of the commitment.
-#[derive(Debug, Clone, Serialize)]
-pub struct WrappedLcEvalProof<F>
-where
-    F: Serialize,
-{
-    n_cols: usize,
-    p_eval: Vec<F>,
-    p_random_vec: Vec<Vec<F>>,
-    columns: Vec<WrappedLcColumn<F>>,
-}
-
-// used locally to hash columns into the transcript
 impl<D, E> LcEvalProof<D, E>
 where
     D: Digest,
     E: LcEncoding,
 {
-    /// make a serializable clone of an LcEvalProof
-    pub fn wrapped(&self) -> WrappedLcEvalProof<FldT<E>> {
-        let columns_wrapped = (0..self.columns.len())
-            .map(|i| self.columns[i].wrapped())
-            .collect();
-
-        WrappedLcEvalProof {
-            n_cols: self.n_cols,
-            p_eval: self.p_eval.clone(),
-            p_random_vec: self.p_random_vec.clone(),
-            columns: columns_wrapped,
-        }
-    }
-
-    /// turn a WrappedLcEvalProof into an LcEvalProof
-    pub fn unwrapped(inp: &WrappedLcEvalProof<FldT<E>>) -> LcEvalProof<D, E> {
-        let columns_unwrapped = (0..inp.columns.len())
-            .map(|i| LcColumn::unwrapped(&inp.columns[i]))
-            .collect();
-
-        LcEvalProof {
-            n_cols: inp.n_cols,
-            p_eval: inp.p_eval.clone(),
-            p_random_vec: inp.p_random_vec.clone(),
-            columns: columns_unwrapped,
-        }
-    }
-
-    // XXX(rsw) add into_wrapped and into_unwrapped
-    // XXX(rsw) sohuldn't unwrapped be a method on WrappedLcEvalProof???
-
     /// Get the number of elements in an encoded vector
     pub fn get_n_cols(&self) -> usize {
         self.n_cols
@@ -356,6 +427,87 @@ where
             n_col_opens,
             tr,
         )
+    }
+}
+
+impl<D, E> LcEvalProof<D, E>
+where
+    D: Digest,
+    E: LcEncoding,
+    E::F: Serialize,
+{
+    fn wrapped(&self) -> WrappedLcEvalProof<FldT<E>> {
+        let columns_wrapped = (0..self.columns.len())
+            .map(|i| self.columns[i].wrapped())
+            .collect();
+
+        WrappedLcEvalProof {
+            n_cols: self.n_cols,
+            p_eval: self.p_eval.clone(),
+            p_random_vec: self.p_random_vec.clone(),
+            columns: columns_wrapped,
+        }
+    }
+}
+
+/// An evaluation and proof of its correctness and of the low-degreeness of the commitment.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct WrappedLcEvalProof<F>
+where
+    F: Serialize,
+{
+    n_cols: usize,
+    p_eval: Vec<F>,
+    p_random_vec: Vec<Vec<F>>,
+    columns: Vec<WrappedLcColumn<F>>,
+}
+
+impl<F> WrappedLcEvalProof<F>
+where
+    F: Serialize,
+{
+    /// turn a WrappedLcEvalProof into an LcEvalProof
+    fn unwrap<D, E>(self) -> LcEvalProof<D, E>
+    where
+        D: Digest,
+        E: LcEncoding<F = F>,
+    {
+        let columns = self.columns.into_iter().map(|c| c.unwrap()).collect();
+
+        LcEvalProof {
+            n_cols: self.n_cols,
+            p_eval: self.p_eval,
+            p_random_vec: self.p_random_vec,
+            columns,
+        }
+    }
+}
+
+impl<D, E> Serialize for LcEvalProof<D, E>
+where
+    D: Digest,
+    E: LcEncoding,
+    E::F: Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.wrapped().serialize(serializer)
+    }
+}
+
+impl<'de, D, E> Deserialize<'de> for LcEvalProof<D, E>
+where
+    D: Digest,
+    E: LcEncoding,
+    E::F: Serialize + Deserialize<'de>,
+{
+    fn deserialize<De>(deserializer: De) -> Result<Self, De::Error>
+    where
+        De: Deserializer<'de>,
+    {
+        Ok(WrappedLcEvalProof::<FldT<E>>::deserialize(deserializer)?.unwrap())
     }
 }
 
@@ -445,39 +597,6 @@ where
     assert!(len_plus_one.is_power_of_two());
     let (hin, hout) = comm.hashes.split_at_mut(len_plus_one / 2);
     merkle_tree::<D>(hin, hout);
-}
-
-#[cfg(test)]
-fn merkleize_ser<D, E>(comm: &mut LcCommit<D, E>)
-where
-    D: Digest,
-    E: LcEncoding,
-{
-    let hashes = &mut comm.hashes;
-
-    // hash each column
-    for (col, hash) in hashes.iter_mut().enumerate().take(comm.n_cols) {
-        let mut digest = D::new();
-        digest.update(<Output<D> as Default>::default());
-        for row in 0..comm.n_rows {
-            comm.comm[row * comm.n_cols + col].digest_update(&mut digest);
-        }
-        *hash = digest.finalize();
-    }
-
-    // compute rest of Merkle tree
-    let (mut ins, mut outs) = hashes.split_at_mut(comm.n_cols);
-    while !outs.is_empty() {
-        for idx in 0..ins.len() / 2 {
-            let mut digest = D::new();
-            digest.update(ins[2 * idx].as_ref());
-            digest.update(ins[2 * idx + 1].as_ref());
-            outs[idx] = digest.finalize();
-        }
-        let (new_ins, new_outs) = outs.split_at_mut((outs.len() + 1) / 2);
-        ins = new_ins;
-        outs = new_outs;
-    }
 }
 
 fn hash_columns<D, E>(
@@ -777,22 +896,6 @@ where
     poly_eval == &tensor_eval
 }
 
-#[cfg(test)]
-// Check a column opening
-fn verify_column<D, E>(
-    column: &LcColumn<D, E>,
-    col_num: usize,
-    root: &Output<D>,
-    tensor: &[FldT<E>],
-    poly_eval: &FldT<E>,
-) -> bool
-where
-    D: Digest,
-    E: LcEncoding,
-{
-    verify_column_path(column, col_num, root) && verify_column_value(column, tensor, poly_eval)
-}
-
 /// Evaluate the committed polynomial using the supplied "outer" tensor
 /// and generate a proof of (1) low-degreeness and (2) correct evaluation.
 fn prove<D, E>(
@@ -863,8 +966,6 @@ where
         .for_each(|coeff| coeff.transcript_update(tr, E::LABEL_PE));
 
     // now extract the column numbers to open
-    // XXX(F-S) should we do this column-by-column, updating the transcript for each???
-    //          It doesn't seem necessary to me...
     let columns: Vec<LcColumn<D, E>> = {
         let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
         tr.challenge_bytes(E::LABEL_CO, &mut key);
@@ -886,34 +987,6 @@ where
         p_random_vec,
         columns,
     })
-}
-
-// Evaluate the committed polynomial using the "outer" tensor
-#[cfg(test)]
-fn eval_outer<D, E>(
-    comm: &LcCommit<D, E>,
-    tensor: &[FldT<E>],
-) -> ProverResult<Vec<FldT<E>>, ErrT<E>>
-where
-    D: Digest,
-    E: LcEncoding,
-{
-    if tensor.len() != comm.n_rows {
-        return Err(ProverError::OuterTensor);
-    }
-
-    // allocate result and compute
-    let mut poly = vec![FldT::<E>::zero(); comm.n_per_row];
-    collapse_columns::<E>(
-        &comm.coeffs,
-        tensor,
-        &mut poly,
-        comm.n_rows,
-        comm.n_per_row,
-        0,
-    );
-
-    Ok(poly)
 }
 
 fn collapse_columns<E>(
@@ -944,6 +1017,85 @@ fn collapse_columns<E>(
             || collapse_columns::<E>(coeffs, tensor, hi, n_rows, n_per_row, offset + half_cols),
         );
     }
+}
+
+// TESTING ONLY //
+
+#[cfg(test)]
+fn merkleize_ser<D, E>(comm: &mut LcCommit<D, E>)
+where
+    D: Digest,
+    E: LcEncoding,
+{
+    let hashes = &mut comm.hashes;
+
+    // hash each column
+    for (col, hash) in hashes.iter_mut().enumerate().take(comm.n_cols) {
+        let mut digest = D::new();
+        digest.update(<Output<D> as Default>::default());
+        for row in 0..comm.n_rows {
+            comm.comm[row * comm.n_cols + col].digest_update(&mut digest);
+        }
+        *hash = digest.finalize();
+    }
+
+    // compute rest of Merkle tree
+    let (mut ins, mut outs) = hashes.split_at_mut(comm.n_cols);
+    while !outs.is_empty() {
+        for idx in 0..ins.len() / 2 {
+            let mut digest = D::new();
+            digest.update(ins[2 * idx].as_ref());
+            digest.update(ins[2 * idx + 1].as_ref());
+            outs[idx] = digest.finalize();
+        }
+        let (new_ins, new_outs) = outs.split_at_mut((outs.len() + 1) / 2);
+        ins = new_ins;
+        outs = new_outs;
+    }
+}
+
+#[cfg(test)]
+// Check a column opening
+fn verify_column<D, E>(
+    column: &LcColumn<D, E>,
+    col_num: usize,
+    root: &Output<D>,
+    tensor: &[FldT<E>],
+    poly_eval: &FldT<E>,
+) -> bool
+where
+    D: Digest,
+    E: LcEncoding,
+{
+    verify_column_path(column, col_num, root) && verify_column_value(column, tensor, poly_eval)
+}
+
+// Evaluate the committed polynomial using the "outer" tensor
+#[cfg(test)]
+fn eval_outer<D, E>(
+    comm: &LcCommit<D, E>,
+    tensor: &[FldT<E>],
+) -> ProverResult<Vec<FldT<E>>, ErrT<E>>
+where
+    D: Digest,
+    E: LcEncoding,
+{
+    if tensor.len() != comm.n_rows {
+        return Err(ProverError::OuterTensor);
+    }
+
+    // allocate result and compute
+    let mut poly = vec![FldT::<E>::zero(); comm.n_per_row];
+    collapse_columns::<E>(
+        &comm.coeffs,
+        tensor,
+        &mut poly,
+        comm.n_rows,
+        comm.n_per_row,
+        0,
+    );
+
+    Ok(poly)
 }
 
 #[cfg(test)]
