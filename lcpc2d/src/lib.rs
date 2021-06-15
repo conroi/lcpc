@@ -397,18 +397,36 @@ where
         })?;
 
     // compute Merkle tree
+    let n_cols_np2 = n_cols.checked_next_power_of_two().ok_or(ProverError::TooBig)?;
     let mut ret = LcCommit {
         comm,
         coeffs,
         n_rows,
         n_cols,
         n_per_row,
-        hashes: vec![<Output<D> as Default>::default(); 2 * n_cols - 1],
+        hashes: vec![<Output<D> as Default>::default(); 2 * n_cols_np2 - 1],
     };
     check_comm(&ret, enc)?;
     merkleize(&mut ret);
 
     Ok(ret)
+}
+
+fn check_comm<D, E>(comm: &LcCommit<D, E>, enc: &E) -> ProverResult<(), ErrT<E>>
+where
+    D: Digest,
+    E: LcEncoding,
+{
+    let comm_sz = comm.comm.len() != comm.n_rows * comm.n_cols;
+    let coeff_sz = comm.coeffs.len() != comm.n_rows * comm.n_per_row;
+    let hashlen = comm.hashes.len() != 2 * comm.n_cols.next_power_of_two() - 1;
+    let dims = !enc.dims_ok(comm.n_per_row, comm.n_cols);
+
+    if comm_sz || coeff_sz || hashlen || dims {
+        Err(ProverError::Commit)
+    } else {
+        Ok(())
+    }
 }
 
 fn merkleize<D, E>(comm: &mut LcCommit<D, E>)
@@ -421,7 +439,9 @@ where
     hash_columns::<D, E>(&comm.comm, hashes, comm.n_rows, comm.n_cols, 0);
 
     // step 2: compute rest of Merkle tree
-    let (hin, hout) = comm.hashes.split_at_mut(comm.n_cols);
+    let len_plus_one = comm.hashes.len() + 1;
+    assert!(len_plus_one.is_power_of_two());
+    let (hin, hout) = comm.hashes.split_at_mut(len_plus_one / 2);
     merkle_tree::<D>(hin, hout);
 }
 
@@ -455,23 +475,6 @@ where
         let (new_ins, new_outs) = outs.split_at_mut((outs.len() + 1) / 2);
         ins = new_ins;
         outs = new_outs;
-    }
-}
-
-fn check_comm<D, E>(comm: &LcCommit<D, E>, enc: &E) -> ProverResult<(), ErrT<E>>
-where
-    D: Digest,
-    E: LcEncoding,
-{
-    let comm_sz = comm.comm.len() != comm.n_rows * comm.n_cols;
-    let coeff_sz = comm.coeffs.len() != comm.n_rows * comm.n_per_row;
-    let hashlen = comm.hashes.len() != 2 * comm.n_cols - 1;
-    let dims = !enc.dims_ok(comm.n_per_row, comm.n_cols);
-
-    if comm_sz || coeff_sz || hashlen || dims {
-        Err(ProverError::Commit)
-    } else {
-        Ok(())
     }
 }
 

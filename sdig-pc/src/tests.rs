@@ -123,7 +123,7 @@ fn test_matgen_encode() {
 }
 
 #[test]
-fn end_to_end() {
+fn end_to_end_one_proof() {
     // commit to a random polynomial at a random rate
     let coeffs = random_coeffs();
     let n_degree_tests = 2;
@@ -291,7 +291,7 @@ fn end_to_end_two_proofs() {
 }
 
 #[test]
-fn fft_end_to_end() {
+fn fft_end_to_end_one_proof() {
     // commit to a random polynomial at a random rate
     let coeffs = random_coeffs();
     let n_degree_tests = 2;
@@ -461,7 +461,7 @@ fn fft_end_to_end_two_proofs() {
 fn random_coeffs() -> Vec<Ft> {
     let mut rng = rand::thread_rng();
 
-    let lgl = 10 + rng.gen::<usize>() % 8;
+    let lgl = 16 + rng.gen::<usize>() % 8;
     let len_base = 1 << (lgl - 1);
     let len = len_base + (rng.gen::<usize>() % len_base);
 
