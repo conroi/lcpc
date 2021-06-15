@@ -397,7 +397,9 @@ where
         })?;
 
     // compute Merkle tree
-    let n_cols_np2 = n_cols.checked_next_power_of_two().ok_or(ProverError::TooBig)?;
+    let n_cols_np2 = n_cols
+        .checked_next_power_of_two()
+        .ok_or(ProverError::TooBig)?;
     let mut ret = LcCommit {
         comm,
         coeffs,
