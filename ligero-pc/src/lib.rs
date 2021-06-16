@@ -12,11 +12,17 @@
 ligero-pc is a polynomial commitment based on R-S codes, from Ligero
 */
 
+#![feature(test)]
+#[cfg(feature = "bench")]
+extern crate test;
+
 use fffft::{FFTError, FFTPrecomp, FieldFFT};
 use lcpc2d::{def_labels, FieldHash, LcCommit, LcEncoding, LcEvalProof};
 use serde::Serialize;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "bench"))]
+mod bench;
+#[cfg(any(test, feature = "bench"))]
 mod tests;
 
 /// Encoding definition for Ligero-based polycommit

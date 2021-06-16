@@ -18,7 +18,7 @@ use rand_chacha::ChaCha20Rng;
 use sha3::Sha3_256;
 use std::iter::repeat_with;
 
-mod ft {
+pub(super) mod ft {
     use ff::PrimeField;
     use lcpc2d::FieldHash;
     use serde::Serialize;
