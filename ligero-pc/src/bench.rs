@@ -33,8 +33,8 @@ fn commit_bench<D: Digest>(b: &mut Bencher, log_len: usize) {
 }
 
 #[bench]
-fn commit_sha3_12(b: &mut Bencher) {
-    commit_bench::<Sha3_256>(b, 12);
+fn commit_sha3_24(b: &mut Bencher) {
+    commit_bench::<Sha3_256>(b, 24);
 }
 
 #[bench]
@@ -48,8 +48,8 @@ fn commit_sha3_20(b: &mut Bencher) {
 }
 
 #[bench]
-fn commit_blake2b_12(b: &mut Bencher) {
-    commit_bench::<Blake2b>(b, 12);
+fn commit_blake2b_24(b: &mut Bencher) {
+    commit_bench::<Blake2b>(b, 24);
 }
 
 #[bench]
@@ -63,8 +63,8 @@ fn commit_blake2b_20(b: &mut Bencher) {
 }
 
 #[bench]
-fn commit_blake3_12(b: &mut Bencher) {
-    commit_bench::<Hasher>(b, 12);
+fn commit_blake3_24(b: &mut Bencher) {
+    commit_bench::<Hasher>(b, 24);
 }
 
 #[bench]
@@ -114,8 +114,8 @@ fn prove_bench<D: Digest>(b: &mut Bencher, log_len: usize) {
 }
 
 #[bench]
-fn prove_sha3_12(b: &mut Bencher) {
-    prove_bench::<Sha3_256>(b, 12);
+fn prove_sha3_24(b: &mut Bencher) {
+    prove_bench::<Sha3_256>(b, 24);
 }
 
 #[bench]
@@ -129,8 +129,8 @@ fn prove_sha3_20(b: &mut Bencher) {
 }
 
 #[bench]
-fn prove_blake2b_12(b: &mut Bencher) {
-    prove_bench::<Blake2b>(b, 12);
+fn prove_blake2b_24(b: &mut Bencher) {
+    prove_bench::<Blake2b>(b, 24);
 }
 
 #[bench]
@@ -144,8 +144,8 @@ fn prove_blake2b_20(b: &mut Bencher) {
 }
 
 #[bench]
-fn prove_blake3_12(b: &mut Bencher) {
-    prove_bench::<Hasher>(b, 12);
+fn prove_blake3_24(b: &mut Bencher) {
+    prove_bench::<Hasher>(b, 24);
 }
 
 #[bench]
@@ -213,8 +213,8 @@ fn verify_bench<D: Digest>(b: &mut Bencher, log_len: usize) {
 }
 
 #[bench]
-fn verify_sha3_12(b: &mut Bencher) {
-    verify_bench::<Sha3_256>(b, 12);
+fn verify_sha3_24(b: &mut Bencher) {
+    verify_bench::<Sha3_256>(b, 24);
 }
 
 #[bench]
@@ -228,8 +228,8 @@ fn verify_sha3_20(b: &mut Bencher) {
 }
 
 #[bench]
-fn verify_blake2b_12(b: &mut Bencher) {
-    verify_bench::<Blake2b>(b, 12);
+fn verify_blake2b_24(b: &mut Bencher) {
+    verify_bench::<Blake2b>(b, 24);
 }
 
 #[bench]
@@ -243,8 +243,8 @@ fn verify_blake2b_20(b: &mut Bencher) {
 }
 
 #[bench]
-fn verify_blake3_12(b: &mut Bencher) {
-    verify_bench::<Hasher>(b, 12);
+fn verify_blake3_24(b: &mut Bencher) {
+    verify_bench::<Hasher>(b, 24);
 }
 
 #[bench]
