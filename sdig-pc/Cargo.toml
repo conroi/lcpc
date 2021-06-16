@@ -10,6 +10,9 @@ repository = "https://github.com/kwantam/lcpc"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+blake2 = { version = "0.9", optional = true }
+blake3 = { version = "0.3", optional = true }
+digest = { version = "0.9", optional = true }
 ff = "0.10"
 fffft = "0.4"
 itertools = "0.10"
@@ -32,3 +35,6 @@ num-traits = "0.2"
 rand_core = "0.6"
 sha3 = "0.9"
 subtle = "2.2"
+
+[features]
+bench = ["blake2", "blake3", "digest"]

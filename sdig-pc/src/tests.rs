@@ -21,7 +21,7 @@ use sha3::Sha3_256;
 use sprs::{CsMat, TriMat};
 use std::iter::repeat_with;
 
-mod ft {
+pub(super) mod ft {
     use ff::PrimeField;
     use ff_derive_num::Num;
     use lcpc2d::FieldHash;

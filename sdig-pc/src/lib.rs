@@ -12,6 +12,10 @@
 sdig-pc is a polynomial commitment scheme from the SDIG expander code
 */
 
+#![feature(test)]
+#[cfg(feature = "bench")]
+extern crate test;
+
 use encode::{encode, reed_solomon, reed_solomon_fft};
 use matgen::generate;
 
@@ -25,7 +29,9 @@ use sprs::{CsMat, MulAcc};
 pub mod encode;
 pub mod matgen;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "bench"))]
+mod bench;
+#[cfg(any(test, feature = "bench"))]
 mod tests;
 
 /// Encoding definition for SDIG expander-based polycommit
