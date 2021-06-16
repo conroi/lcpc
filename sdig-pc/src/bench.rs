@@ -16,7 +16,6 @@ use itertools::iterate;
 use lcpc2d::FieldHash;
 use merlin::Transcript;
 use num_traits::Num;
-use paste::paste;
 use sprs::MulAcc;
 use std::iter::repeat_with;
 use test::{black_box, Bencher};

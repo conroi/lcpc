@@ -9,34 +9,14 @@
 
 use super::{LigeroCommit, LigeroEncoding};
 
+use blake2::Blake2b;
 use ff::Field;
-use ft::*;
 use itertools::iterate;
 use merlin::Transcript;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use sha3::Sha3_256;
 use std::iter::repeat_with;
-
-pub(super) mod ft {
-    use ff::PrimeField;
-    use lcpc2d::FieldHash;
-    use serde::Serialize;
-
-    #[derive(PrimeField, Serialize)]
-    #[PrimeFieldModulus = "70386805592835581672624750593"]
-    #[PrimeFieldGenerator = "17"]
-    #[PrimeFieldReprEndianness = "little"]
-    pub struct Ft([u64; 2]);
-
-    impl FieldHash for Ft {
-        type HashRepr = <Ft as PrimeField>::Repr;
-
-        fn to_hash_repr(&self) -> Self::HashRepr {
-            PrimeField::to_repr(self)
-        }
-    }
-}
+use test_fields::ft63::*;
 
 #[test]
 fn get_dims() {
@@ -48,11 +28,11 @@ fn get_dims() {
             let len_base = 1 << (lgl - 1);
             let len = len_base + (rng.gen::<usize>() % len_base);
             let rho = rng.gen_range(0.001f64..1f64);
-            let (n_rows, n_per_row, n_cols) = LigeroEncoding::<Ft>::_get_dims(len, rho).unwrap();
+            let (n_rows, n_per_row, n_cols) = LigeroEncoding::<Ft63>::_get_dims(len, rho).unwrap();
             assert!(n_rows * n_per_row >= len);
             assert!((n_rows - 1) * n_per_row < len);
             assert!(n_per_row as f64 / rho <= n_cols as f64);
-            assert!(LigeroEncoding::<Ft>::_dims_ok(n_per_row, n_cols));
+            assert!(LigeroEncoding::<Ft63>::_dims_ok(n_per_row, n_cols));
         }
     }
 }
@@ -64,23 +44,23 @@ fn end_to_end() {
     let n_degree_tests = 2;
     let n_col_opens = 128usize;
     let enc = LigeroEncoding::new(coeffs.len(), rho);
-    let comm = LigeroCommit::<Sha3_256, _>::commit(&coeffs, &enc).unwrap();
+    let comm = LigeroCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root();
 
     // evaluate the random polynomial we just generated at a random point x
-    let x = Ft::random(&mut rand::thread_rng());
+    let x = Ft63::random(&mut rand::thread_rng());
 
     // compute the outer and inner tensors for powers of x
     // NOTE: we treat coeffs as a univariate polynomial, but it doesn't
     // really matter --- the only difference from a multilinear is the
     // way we compute outer_tensor and inner_tensor from the eval point
-    let inner_tensor: Vec<Ft> = iterate(Ft::one(), |&v| v * x)
+    let inner_tensor: Vec<Ft63> = iterate(Ft63::one(), |&v| v * x)
         .take(comm.get_n_per_row())
         .collect();
-    let outer_tensor: Vec<Ft> = {
+    let outer_tensor: Vec<Ft63> = {
         let xr = x * inner_tensor.last().unwrap();
-        iterate(Ft::one(), |&v| v * xr)
+        iterate(Ft63::one(), |&v| v * xr)
             .take(comm.get_n_rows())
             .collect()
     };
@@ -125,23 +105,23 @@ fn end_to_end_two_proofs() {
     let n_degree_tests = 1;
     let n_col_opens = 128usize;
     let enc = LigeroEncoding::new(coeffs.len(), rho);
-    let comm = LigeroCommit::<Sha3_256, _>::commit(&coeffs, &enc).unwrap();
+    let comm = LigeroCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root();
 
     // evaluate the random polynomial we just generated at a random point x
-    let x = Ft::random(&mut rand::thread_rng());
+    let x = Ft63::random(&mut rand::thread_rng());
 
     // compute the outer and inner tensors for powers of x
     // NOTE: we treat coeffs as a univariate polynomial, but it doesn't
     // really matter --- the only difference from a multilinear is the
     // way we compute outer_tensor and inner_tensor from the eval point
-    let inner_tensor: Vec<Ft> = iterate(Ft::one(), |&v| v * x)
+    let inner_tensor: Vec<Ft63> = iterate(Ft63::one(), |&v| v * x)
         .take(comm.get_n_per_row())
         .collect();
-    let outer_tensor: Vec<Ft> = {
+    let outer_tensor: Vec<Ft63> = {
         let xr = x * inner_tensor.last().unwrap();
-        iterate(Ft::one(), |&v| v * xr)
+        iterate(Ft63::one(), |&v| v * xr)
             .take(comm.get_n_rows())
             .collect()
     };
@@ -165,7 +145,7 @@ fn end_to_end_two_proofs() {
         let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
         tr1.challenge_bytes(b"ligero-pc//challenge", &mut key);
         let mut deg_test_rng = ChaCha20Rng::from_seed(key);
-        Ft::random(&mut deg_test_rng)
+        Ft63::random(&mut deg_test_rng)
     };
 
     // produce a second proof with the same transcript
@@ -204,7 +184,7 @@ fn end_to_end_two_proofs() {
         let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
         tr2.challenge_bytes(b"ligero-pc//challenge", &mut key);
         let mut deg_test_rng = ChaCha20Rng::from_seed(key);
-        Ft::random(&mut deg_test_rng)
+        Ft63::random(&mut deg_test_rng)
     };
     assert_eq!(
         challenge_after_first_proof_prover,
@@ -231,7 +211,7 @@ fn end_to_end_two_proofs() {
     assert_eq!(res, res2);
 }
 
-fn random_coeffs_rho() -> (Vec<Ft>, f64) {
+fn random_coeffs_rho() -> (Vec<Ft63>, f64) {
     let mut rng = rand::thread_rng();
 
     let lgl = 8 + rng.gen::<usize>() % 8;
@@ -239,7 +219,7 @@ fn random_coeffs_rho() -> (Vec<Ft>, f64) {
     let len = len_base + (rng.gen::<usize>() % len_base);
 
     (
-        repeat_with(|| Ft::random(&mut rng)).take(len).collect(),
+        repeat_with(|| Ft63::random(&mut rng)).take(len).collect(),
         rng.gen_range(0.1f64..0.9f64),
     )
 }

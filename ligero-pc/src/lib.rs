@@ -18,7 +18,6 @@ extern crate test;
 
 use fffft::{FFTError, FFTPrecomp, FieldFFT};
 use lcpc2d::{def_labels, FieldHash, LcCommit, LcEncoding, LcEvalProof};
-use serde::Serialize;
 
 #[cfg(all(test, feature = "bench"))]
 mod bench;
@@ -96,7 +95,7 @@ where
 
 impl<Ft> LcEncoding for LigeroEncoding<Ft>
 where
-    Ft: FieldFFT + FieldHash + Serialize,
+    Ft: FieldFFT + FieldHash,
 {
     type F = Ft;
     type Err = FFTError;
