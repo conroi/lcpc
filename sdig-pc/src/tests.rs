@@ -9,38 +9,17 @@
 
 use super::{SdigCommit, SdigEncoding, SdigFFTCommit, SdigFFTEncoding};
 
+use blake2::Blake2b;
 use ff::Field;
 use fffft::FieldFFT;
-use ft::*;
 use itertools::iterate;
 use merlin::Transcript;
 use ndarray::{linalg::Dot, Array};
 use rand::{thread_rng, Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use sha3::Sha3_256;
 use sprs::{CsMat, TriMat};
 use std::iter::repeat_with;
-
-pub(super) mod ft {
-    use ff::PrimeField;
-    use ff_derive_num::Num;
-    use lcpc2d::FieldHash;
-    use serde::Serialize;
-
-    #[derive(PrimeField, Num, Serialize)]
-    #[PrimeFieldModulus = "70386805592835581672624750593"]
-    #[PrimeFieldGenerator = "17"]
-    #[PrimeFieldReprEndianness = "little"]
-    pub struct Ft([u64; 2]);
-
-    impl FieldHash for Ft {
-        type HashRepr = <Ft as PrimeField>::Repr;
-
-        fn to_hash_repr(&self) -> Self::HashRepr {
-            PrimeField::to_repr(self)
-        }
-    }
-}
+use test_fields::ft63::*;
 
 #[test]
 fn sprs_playground() {
@@ -59,8 +38,8 @@ fn sprs_playground() {
                 }
                 tmp
             };
-            tmp.add_triplet(i, col1, Ft::random(&mut rng));
-            tmp.add_triplet(i, col2, Ft::random(&mut rng));
+            tmp.add_triplet(i, col1, Ft63::random(&mut rng));
+            tmp.add_triplet(i, col2, Ft63::random(&mut rng));
         }
         // to_csr appears to be considerably faster than to_csc
         // (note that because of the transpose, we end up with csc in the end)
@@ -70,12 +49,12 @@ fn sprs_playground() {
     let v = {
         let mut tmp = Vec::with_capacity(n_rows);
         for _ in 0..n_rows {
-            tmp.push(Ft::random(&mut rng));
+            tmp.push(Ft63::random(&mut rng));
         }
         Array::from(tmp)
     };
 
-    let mut t = Ft::zero();
+    let mut t = Ft63::zero();
     for i in 0..10 {
         let mv = m.dot(&v);
         t += mv[i % n_cols];
@@ -90,7 +69,7 @@ fn test_matgen_check_seed() {
 
     let n = 256usize + (rng.gen::<usize>() % 4096);
     for seed in 0..1024u64 {
-        if check_seed::<Ft>(n, 128, seed) {
+        if check_seed::<Ft63>(n, 128, seed) {
             println!("Seed {} was good for n={}", seed, n);
             return;
         }
@@ -111,11 +90,11 @@ fn test_matgen_encode() {
     let xi_len = precodes[0].cols() + postcodes[0].rows();
     let mut xi = Vec::with_capacity(xi_len);
     for _ in 0..xi_len {
-        xi.push(Ft::random(&mut rng));
+        xi.push(Ft63::random(&mut rng));
     }
     encode(&mut xi, baselen, &precodes, &postcodes, reed_solomon).unwrap();
 
-    let pc = <Ft as FieldFFT>::precomp_fft(baselen).unwrap();
+    let pc = <Ft63 as FieldFFT>::precomp_fft(baselen).unwrap();
     encode(&mut xi, baselen, &precodes, &postcodes, |x, l| {
         reed_solomon_fft(x, l, &pc)
     })
@@ -129,23 +108,23 @@ fn end_to_end_one_proof() {
     let n_degree_tests = 2;
     let n_col_opens = 128usize;
     let enc = SdigEncoding::new(coeffs.len(), 0);
-    let comm = SdigCommit::<Sha3_256, _>::commit(&coeffs, &enc).unwrap();
+    let comm = SdigCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root();
 
     // evaluate the random polynomial we just generated at a random point x
-    let x = Ft::random(&mut rand::thread_rng());
+    let x = Ft63::random(&mut rand::thread_rng());
 
     // compute the outer and inner tensors for powers of x
     // NOTE: we treat coeffs as a univariate polynomial, but it doesn't
     // really matter --- the only difference from a multilinear is the
     // way we compute outer_tensor and inner_tensor from the eval point
-    let inner_tensor: Vec<Ft> = iterate(Ft::one(), |&v| v * x)
+    let inner_tensor: Vec<Ft63> = iterate(Ft63::one(), |&v| v * x)
         .take(comm.get_n_per_row())
         .collect();
-    let outer_tensor: Vec<Ft> = {
+    let outer_tensor: Vec<Ft63> = {
         let xr = x * inner_tensor.last().unwrap();
-        iterate(Ft::one(), |&v| v * xr)
+        iterate(Ft63::one(), |&v| v * xr)
             .take(comm.get_n_rows())
             .collect()
     };
@@ -188,23 +167,23 @@ fn end_to_end_two_proofs() {
     let n_degree_tests = 1;
     let n_col_opens = 128usize;
     let enc = SdigEncoding::new(coeffs.len(), 1);
-    let comm = SdigCommit::<Sha3_256, _>::commit(&coeffs, &enc).unwrap();
+    let comm = SdigCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root();
 
     // evaluate the random polynomial we just generated at a random point x
-    let x = Ft::random(&mut rand::thread_rng());
+    let x = Ft63::random(&mut rand::thread_rng());
 
     // compute the outer and inner tensors for powers of x
     // NOTE: we treat coeffs as a univariate polynomial, but it doesn't
     // really matter --- the only difference from a multilinear is the
     // way we compute outer_tensor and inner_tensor from the eval point
-    let inner_tensor: Vec<Ft> = iterate(Ft::one(), |&v| v * x)
+    let inner_tensor: Vec<Ft63> = iterate(Ft63::one(), |&v| v * x)
         .take(comm.get_n_per_row())
         .collect();
-    let outer_tensor: Vec<Ft> = {
+    let outer_tensor: Vec<Ft63> = {
         let xr = x * inner_tensor.last().unwrap();
-        iterate(Ft::one(), |&v| v * xr)
+        iterate(Ft63::one(), |&v| v * xr)
             .take(comm.get_n_rows())
             .collect()
     };
@@ -227,7 +206,7 @@ fn end_to_end_two_proofs() {
         let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
         tr1.challenge_bytes(b"ligero-pc//challenge", &mut key);
         let mut deg_test_rng = ChaCha20Rng::from_seed(key);
-        Ft::random(&mut deg_test_rng)
+        Ft63::random(&mut deg_test_rng)
     };
 
     // produce a second proof with the same transcript
@@ -264,7 +243,7 @@ fn end_to_end_two_proofs() {
         let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
         tr2.challenge_bytes(b"ligero-pc//challenge", &mut key);
         let mut deg_test_rng = ChaCha20Rng::from_seed(key);
-        Ft::random(&mut deg_test_rng)
+        Ft63::random(&mut deg_test_rng)
     };
     assert_eq!(
         challenge_after_first_proof_prover,
@@ -297,23 +276,23 @@ fn fft_end_to_end_one_proof() {
     let n_degree_tests = 2;
     let n_col_opens = 128usize;
     let enc = SdigFFTEncoding::new(coeffs.len(), 2);
-    let comm = SdigFFTCommit::<Sha3_256, _>::commit(&coeffs, &enc).unwrap();
+    let comm = SdigFFTCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root();
 
     // evaluate the random polynomial we just generated at a random point x
-    let x = Ft::random(&mut rand::thread_rng());
+    let x = Ft63::random(&mut rand::thread_rng());
 
     // compute the outer and inner tensors for powers of x
     // NOTE: we treat coeffs as a univariate polynomial, but it doesn't
     // really matter --- the only difference from a multilinear is the
     // way we compute outer_tensor and inner_tensor from the eval point
-    let inner_tensor: Vec<Ft> = iterate(Ft::one(), |&v| v * x)
+    let inner_tensor: Vec<Ft63> = iterate(Ft63::one(), |&v| v * x)
         .take(comm.get_n_per_row())
         .collect();
-    let outer_tensor: Vec<Ft> = {
+    let outer_tensor: Vec<Ft63> = {
         let xr = x * inner_tensor.last().unwrap();
-        iterate(Ft::one(), |&v| v * xr)
+        iterate(Ft63::one(), |&v| v * xr)
             .take(comm.get_n_rows())
             .collect()
     };
@@ -356,23 +335,23 @@ fn fft_end_to_end_two_proofs() {
     let n_degree_tests = 1;
     let n_col_opens = 128usize;
     let enc = SdigFFTEncoding::new(coeffs.len(), 3);
-    let comm = SdigFFTCommit::<Sha3_256, _>::commit(&coeffs, &enc).unwrap();
+    let comm = SdigFFTCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root();
 
     // evaluate the random polynomial we just generated at a random point x
-    let x = Ft::random(&mut rand::thread_rng());
+    let x = Ft63::random(&mut rand::thread_rng());
 
     // compute the outer and inner tensors for powers of x
     // NOTE: we treat coeffs as a univariate polynomial, but it doesn't
     // really matter --- the only difference from a multilinear is the
     // way we compute outer_tensor and inner_tensor from the eval point
-    let inner_tensor: Vec<Ft> = iterate(Ft::one(), |&v| v * x)
+    let inner_tensor: Vec<Ft63> = iterate(Ft63::one(), |&v| v * x)
         .take(comm.get_n_per_row())
         .collect();
-    let outer_tensor: Vec<Ft> = {
+    let outer_tensor: Vec<Ft63> = {
         let xr = x * inner_tensor.last().unwrap();
-        iterate(Ft::one(), |&v| v * xr)
+        iterate(Ft63::one(), |&v| v * xr)
             .take(comm.get_n_rows())
             .collect()
     };
@@ -395,7 +374,7 @@ fn fft_end_to_end_two_proofs() {
         let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
         tr1.challenge_bytes(b"ligero-pc//challenge", &mut key);
         let mut deg_test_rng = ChaCha20Rng::from_seed(key);
-        Ft::random(&mut deg_test_rng)
+        Ft63::random(&mut deg_test_rng)
     };
 
     // produce a second proof with the same transcript
@@ -432,7 +411,7 @@ fn fft_end_to_end_two_proofs() {
         let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
         tr2.challenge_bytes(b"ligero-pc//challenge", &mut key);
         let mut deg_test_rng = ChaCha20Rng::from_seed(key);
-        Ft::random(&mut deg_test_rng)
+        Ft63::random(&mut deg_test_rng)
     };
     assert_eq!(
         challenge_after_first_proof_prover,
@@ -458,12 +437,12 @@ fn fft_end_to_end_two_proofs() {
     assert_eq!(res, res2);
 }
 
-fn random_coeffs() -> Vec<Ft> {
+fn random_coeffs() -> Vec<Ft63> {
     let mut rng = rand::thread_rng();
 
     let lgl = 16 + rng.gen::<usize>() % 8;
     let len_base = 1 << (lgl - 1);
     let len = len_base + (rng.gen::<usize>() % len_base);
 
-    repeat_with(|| Ft::random(&mut rng)).take(len).collect()
+    repeat_with(|| Ft63::random(&mut rng)).take(len).collect()
 }

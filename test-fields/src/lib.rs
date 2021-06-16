@@ -55,3 +55,16 @@ pub mod ft255 {
     #[PrimeFieldReprEndianness = "little"]
     pub struct Ft255([u64; 4]);
 }
+
+/// Define a bench function
+#[macro_export]
+macro_rules! def_bench {
+    ($ben: ident, $fld: ident, $dig: ident, $len: literal) => {
+        paste! {
+            #[bench]
+            fn [<$ben _ $fld _ $dig _ $len>](b: &mut Bencher) {
+                [<$ben _ bench>]::<$dig, $fld>(b, $len);
+            }
+        }
+    };
+}

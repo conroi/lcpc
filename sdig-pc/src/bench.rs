@@ -7,30 +7,36 @@
 // This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use super::tests::ft::*;
 use super::{SdigCommit, SdigEncoding, SdigFFTCommit, SdigFFTEncoding};
 
-use blake2::Blake2b;
-use blake3::Hasher;
-use digest::Digest;
+use blake2::{Blake2b, Digest};
 use ff::Field;
+use fffft::FieldFFT;
 use itertools::iterate;
+use lcpc2d::FieldHash;
 use merlin::Transcript;
-use sha3::Sha3_256;
+use num_traits::Num;
+use paste::paste;
+use sprs::MulAcc;
 use std::iter::repeat_with;
 use test::{black_box, Bencher};
+use test_fields::{def_bench, ft127::*, ft255::*};
 
 const N_DEGREE_TESTS: usize = 2;
 const N_COL_OPENS: usize = 128;
 
-fn random_coeffs(log_len: usize) -> Vec<Ft> {
+fn random_coeffs<Ft: Field>(log_len: usize) -> Vec<Ft> {
     let mut rng = rand::thread_rng();
     repeat_with(|| Ft::random(&mut rng))
         .take(1 << log_len)
         .collect()
 }
 
-fn commit_bench<D: Digest>(b: &mut Bencher, log_len: usize) {
+fn commit_bench<D, Ft>(b: &mut Bencher, log_len: usize)
+where
+    D: Digest,
+    Ft: Field + FieldHash + MulAcc + Num,
+{
     let coeffs = random_coeffs(log_len);
     let enc = SdigEncoding::new(coeffs.len(), 0);
 
@@ -39,64 +45,23 @@ fn commit_bench<D: Digest>(b: &mut Bencher, log_len: usize) {
     });
 }
 
-#[bench]
-fn commit_sha3_24(b: &mut Bencher) {
-    commit_bench::<Sha3_256>(b, 24);
-}
-
-#[bench]
-fn commit_sha3_16(b: &mut Bencher) {
-    commit_bench::<Sha3_256>(b, 16);
-}
-
-#[bench]
-fn commit_sha3_20(b: &mut Bencher) {
-    commit_bench::<Sha3_256>(b, 20);
-}
-
-#[bench]
-fn commit_blake2b_24(b: &mut Bencher) {
-    commit_bench::<Blake2b>(b, 24);
-}
-
-#[bench]
-fn commit_blake2b_16(b: &mut Bencher) {
-    commit_bench::<Blake2b>(b, 16);
-}
-
-#[bench]
-fn commit_blake2b_20(b: &mut Bencher) {
-    commit_bench::<Blake2b>(b, 20);
-}
-
-#[bench]
-fn commit_blake3_24(b: &mut Bencher) {
-    commit_bench::<Hasher>(b, 24);
-}
-
-#[bench]
-fn commit_blake3_16(b: &mut Bencher) {
-    commit_bench::<Hasher>(b, 16);
-}
-
-#[bench]
-fn commit_blake3_20(b: &mut Bencher) {
-    commit_bench::<Hasher>(b, 20);
-}
-
-fn prove_bench<D: Digest>(b: &mut Bencher, log_len: usize) {
+fn prove_bench<D, Ft>(b: &mut Bencher, log_len: usize)
+where
+    D: Digest,
+    Ft: Field + FieldHash + MulAcc + Num,
+{
     let coeffs = random_coeffs(log_len);
     let enc = SdigEncoding::new(coeffs.len(), 0);
     let comm = SdigCommit::<D, Ft>::commit(&coeffs, &enc).unwrap();
 
     // random point to eval at
     let x = Ft::random(&mut rand::thread_rng());
-    let inner_tensor: Vec<Ft> = iterate(Ft::one(), |&v| v * x)
+    let inner_tensor: Vec<Ft> = iterate(<Ft as Field>::one(), |&v| v * x)
         .take(comm.get_n_per_row())
         .collect();
     let outer_tensor: Vec<Ft> = {
         let xr = x * inner_tensor.last().unwrap();
-        iterate(Ft::one(), |&v| v * xr)
+        iterate(<Ft as Field>::one(), |&v| v * xr)
             .take(comm.get_n_rows())
             .collect()
     };
@@ -120,64 +85,23 @@ fn prove_bench<D: Digest>(b: &mut Bencher, log_len: usize) {
     });
 }
 
-#[bench]
-fn prove_sha3_24(b: &mut Bencher) {
-    prove_bench::<Sha3_256>(b, 24);
-}
-
-#[bench]
-fn prove_sha3_16(b: &mut Bencher) {
-    prove_bench::<Sha3_256>(b, 16);
-}
-
-#[bench]
-fn prove_sha3_20(b: &mut Bencher) {
-    prove_bench::<Sha3_256>(b, 20);
-}
-
-#[bench]
-fn prove_blake2b_24(b: &mut Bencher) {
-    prove_bench::<Blake2b>(b, 24);
-}
-
-#[bench]
-fn prove_blake2b_16(b: &mut Bencher) {
-    prove_bench::<Blake2b>(b, 16);
-}
-
-#[bench]
-fn prove_blake2b_20(b: &mut Bencher) {
-    prove_bench::<Blake2b>(b, 20);
-}
-
-#[bench]
-fn prove_blake3_24(b: &mut Bencher) {
-    prove_bench::<Hasher>(b, 24);
-}
-
-#[bench]
-fn prove_blake3_16(b: &mut Bencher) {
-    prove_bench::<Hasher>(b, 16);
-}
-
-#[bench]
-fn prove_blake3_20(b: &mut Bencher) {
-    prove_bench::<Hasher>(b, 20);
-}
-
-fn verify_bench<D: Digest>(b: &mut Bencher, log_len: usize) {
+fn verify_bench<D, Ft>(b: &mut Bencher, log_len: usize)
+where
+    D: Digest,
+    Ft: Field + FieldHash + MulAcc + Num,
+{
     let coeffs = random_coeffs(log_len);
     let enc = SdigEncoding::new(coeffs.len(), 0);
     let comm = SdigCommit::<D, Ft>::commit(&coeffs, &enc).unwrap();
 
     // random point to eval at
     let x = Ft::random(&mut rand::thread_rng());
-    let inner_tensor: Vec<Ft> = iterate(Ft::one(), |&v| v * x)
+    let inner_tensor: Vec<Ft> = iterate(<Ft as Field>::one(), |&v| v * x)
         .take(comm.get_n_per_row())
         .collect();
     let outer_tensor: Vec<Ft> = {
         let xr = x * inner_tensor.last().unwrap();
-        iterate(Ft::one(), |&v| v * xr)
+        iterate(<Ft as Field>::one(), |&v| v * xr)
             .take(comm.get_n_rows())
             .collect()
     };
@@ -219,52 +143,11 @@ fn verify_bench<D: Digest>(b: &mut Bencher, log_len: usize) {
     });
 }
 
-#[bench]
-fn verify_sha3_24(b: &mut Bencher) {
-    verify_bench::<Sha3_256>(b, 24);
-}
-
-#[bench]
-fn verify_sha3_16(b: &mut Bencher) {
-    verify_bench::<Sha3_256>(b, 16);
-}
-
-#[bench]
-fn verify_sha3_20(b: &mut Bencher) {
-    verify_bench::<Sha3_256>(b, 20);
-}
-
-#[bench]
-fn verify_blake2b_24(b: &mut Bencher) {
-    verify_bench::<Blake2b>(b, 24);
-}
-
-#[bench]
-fn verify_blake2b_16(b: &mut Bencher) {
-    verify_bench::<Blake2b>(b, 16);
-}
-
-#[bench]
-fn verify_blake2b_20(b: &mut Bencher) {
-    verify_bench::<Blake2b>(b, 20);
-}
-
-#[bench]
-fn verify_blake3_24(b: &mut Bencher) {
-    verify_bench::<Hasher>(b, 24);
-}
-
-#[bench]
-fn verify_blake3_16(b: &mut Bencher) {
-    verify_bench::<Hasher>(b, 16);
-}
-
-#[bench]
-fn verify_blake3_20(b: &mut Bencher) {
-    verify_bench::<Hasher>(b, 20);
-}
-
-fn commit_fft_bench<D: Digest>(b: &mut Bencher, log_len: usize) {
+fn commit_fft_bench<D, Ft>(b: &mut Bencher, log_len: usize)
+where
+    D: Digest,
+    Ft: FieldFFT + FieldHash + MulAcc + Num,
+{
     let coeffs = random_coeffs(log_len);
     let enc = SdigFFTEncoding::new(coeffs.len(), 0);
 
@@ -273,64 +156,23 @@ fn commit_fft_bench<D: Digest>(b: &mut Bencher, log_len: usize) {
     });
 }
 
-#[bench]
-fn commit_fft_sha3_24(b: &mut Bencher) {
-    commit_fft_bench::<Sha3_256>(b, 24);
-}
-
-#[bench]
-fn commit_fft_sha3_16(b: &mut Bencher) {
-    commit_fft_bench::<Sha3_256>(b, 16);
-}
-
-#[bench]
-fn commit_fft_sha3_20(b: &mut Bencher) {
-    commit_fft_bench::<Sha3_256>(b, 20);
-}
-
-#[bench]
-fn commit_fft_blake2b_24(b: &mut Bencher) {
-    commit_fft_bench::<Blake2b>(b, 24);
-}
-
-#[bench]
-fn commit_fft_blake2b_16(b: &mut Bencher) {
-    commit_fft_bench::<Blake2b>(b, 16);
-}
-
-#[bench]
-fn commit_fft_blake2b_20(b: &mut Bencher) {
-    commit_fft_bench::<Blake2b>(b, 20);
-}
-
-#[bench]
-fn commit_fft_blake3_24(b: &mut Bencher) {
-    commit_fft_bench::<Hasher>(b, 24);
-}
-
-#[bench]
-fn commit_fft_blake3_16(b: &mut Bencher) {
-    commit_fft_bench::<Hasher>(b, 16);
-}
-
-#[bench]
-fn commit_fft_blake3_20(b: &mut Bencher) {
-    commit_fft_bench::<Hasher>(b, 20);
-}
-
-fn prove_fft_bench<D: Digest>(b: &mut Bencher, log_len: usize) {
+fn prove_fft_bench<D, Ft>(b: &mut Bencher, log_len: usize)
+where
+    D: Digest,
+    Ft: FieldFFT + FieldHash + MulAcc + Num,
+{
     let coeffs = random_coeffs(log_len);
     let enc = SdigFFTEncoding::new(coeffs.len(), 0);
     let comm = SdigFFTCommit::<D, Ft>::commit(&coeffs, &enc).unwrap();
 
     // random point to eval at
     let x = Ft::random(&mut rand::thread_rng());
-    let inner_tensor: Vec<Ft> = iterate(Ft::one(), |&v| v * x)
+    let inner_tensor: Vec<Ft> = iterate(<Ft as Field>::one(), |&v| v * x)
         .take(comm.get_n_per_row())
         .collect();
     let outer_tensor: Vec<Ft> = {
         let xr = x * inner_tensor.last().unwrap();
-        iterate(Ft::one(), |&v| v * xr)
+        iterate(<Ft as Field>::one(), |&v| v * xr)
             .take(comm.get_n_rows())
             .collect()
     };
@@ -354,64 +196,23 @@ fn prove_fft_bench<D: Digest>(b: &mut Bencher, log_len: usize) {
     });
 }
 
-#[bench]
-fn prove_fft_sha3_24(b: &mut Bencher) {
-    prove_fft_bench::<Sha3_256>(b, 24);
-}
-
-#[bench]
-fn prove_fft_sha3_16(b: &mut Bencher) {
-    prove_fft_bench::<Sha3_256>(b, 16);
-}
-
-#[bench]
-fn prove_fft_sha3_20(b: &mut Bencher) {
-    prove_fft_bench::<Sha3_256>(b, 20);
-}
-
-#[bench]
-fn prove_fft_blake2b_24(b: &mut Bencher) {
-    prove_fft_bench::<Blake2b>(b, 24);
-}
-
-#[bench]
-fn prove_fft_blake2b_16(b: &mut Bencher) {
-    prove_fft_bench::<Blake2b>(b, 16);
-}
-
-#[bench]
-fn prove_fft_blake2b_20(b: &mut Bencher) {
-    prove_fft_bench::<Blake2b>(b, 20);
-}
-
-#[bench]
-fn prove_fft_blake3_24(b: &mut Bencher) {
-    prove_fft_bench::<Hasher>(b, 24);
-}
-
-#[bench]
-fn prove_fft_blake3_16(b: &mut Bencher) {
-    prove_fft_bench::<Hasher>(b, 16);
-}
-
-#[bench]
-fn prove_fft_blake3_20(b: &mut Bencher) {
-    prove_fft_bench::<Hasher>(b, 20);
-}
-
-fn verify_fft_bench<D: Digest>(b: &mut Bencher, log_len: usize) {
+fn verify_fft_bench<D, Ft>(b: &mut Bencher, log_len: usize)
+where
+    D: Digest,
+    Ft: FieldFFT + FieldHash + MulAcc + Num,
+{
     let coeffs = random_coeffs(log_len);
     let enc = SdigFFTEncoding::new(coeffs.len(), 0);
     let comm = SdigFFTCommit::<D, Ft>::commit(&coeffs, &enc).unwrap();
 
     // random point to eval at
     let x = Ft::random(&mut rand::thread_rng());
-    let inner_tensor: Vec<Ft> = iterate(Ft::one(), |&v| v * x)
+    let inner_tensor: Vec<Ft> = iterate(<Ft as Field>::one(), |&v| v * x)
         .take(comm.get_n_per_row())
         .collect();
     let outer_tensor: Vec<Ft> = {
         let xr = x * inner_tensor.last().unwrap();
-        iterate(Ft::one(), |&v| v * xr)
+        iterate(<Ft as Field>::one(), |&v| v * xr)
             .take(comm.get_n_rows())
             .collect()
     };
@@ -453,47 +254,50 @@ fn verify_fft_bench<D: Digest>(b: &mut Bencher, log_len: usize) {
     });
 }
 
-#[bench]
-fn verify_fft_sha3_24(b: &mut Bencher) {
-    verify_fft_bench::<Sha3_256>(b, 24);
-}
+def_bench!(commit, Ft127, Blake2b, 16);
+def_bench!(commit, Ft127, Blake2b, 20);
+def_bench!(commit, Ft127, Blake2b, 24);
 
-#[bench]
-fn verify_fft_sha3_16(b: &mut Bencher) {
-    verify_fft_bench::<Sha3_256>(b, 16);
-}
+def_bench!(prove, Ft127, Blake2b, 16);
+def_bench!(prove, Ft127, Blake2b, 20);
+def_bench!(prove, Ft127, Blake2b, 24);
 
-#[bench]
-fn verify_fft_sha3_20(b: &mut Bencher) {
-    verify_fft_bench::<Sha3_256>(b, 20);
-}
+def_bench!(verify, Ft127, Blake2b, 16);
+def_bench!(verify, Ft127, Blake2b, 20);
+def_bench!(verify, Ft127, Blake2b, 24);
 
-#[bench]
-fn verify_fft_blake2b_24(b: &mut Bencher) {
-    verify_fft_bench::<Blake2b>(b, 24);
-}
+def_bench!(commit_fft, Ft127, Blake2b, 16);
+def_bench!(commit_fft, Ft127, Blake2b, 20);
+def_bench!(commit_fft, Ft127, Blake2b, 24);
 
-#[bench]
-fn verify_fft_blake2b_16(b: &mut Bencher) {
-    verify_fft_bench::<Blake2b>(b, 16);
-}
+def_bench!(prove_fft, Ft127, Blake2b, 16);
+def_bench!(prove_fft, Ft127, Blake2b, 20);
+def_bench!(prove_fft, Ft127, Blake2b, 24);
 
-#[bench]
-fn verify_fft_blake2b_20(b: &mut Bencher) {
-    verify_fft_bench::<Blake2b>(b, 20);
-}
+def_bench!(verify_fft, Ft127, Blake2b, 16);
+def_bench!(verify_fft, Ft127, Blake2b, 20);
+def_bench!(verify_fft, Ft127, Blake2b, 24);
 
-#[bench]
-fn verify_fft_blake3_24(b: &mut Bencher) {
-    verify_fft_bench::<Hasher>(b, 24);
-}
+def_bench!(commit, Ft255, Blake2b, 16);
+def_bench!(commit, Ft255, Blake2b, 20);
+def_bench!(commit, Ft255, Blake2b, 24);
 
-#[bench]
-fn verify_fft_blake3_16(b: &mut Bencher) {
-    verify_fft_bench::<Hasher>(b, 16);
-}
+def_bench!(prove, Ft255, Blake2b, 16);
+def_bench!(prove, Ft255, Blake2b, 20);
+def_bench!(prove, Ft255, Blake2b, 24);
 
-#[bench]
-fn verify_fft_blake3_20(b: &mut Bencher) {
-    verify_fft_bench::<Hasher>(b, 20);
-}
+def_bench!(verify, Ft255, Blake2b, 16);
+def_bench!(verify, Ft255, Blake2b, 20);
+def_bench!(verify, Ft255, Blake2b, 24);
+
+def_bench!(commit_fft, Ft255, Blake2b, 16);
+def_bench!(commit_fft, Ft255, Blake2b, 20);
+def_bench!(commit_fft, Ft255, Blake2b, 24);
+
+def_bench!(prove_fft, Ft255, Blake2b, 16);
+def_bench!(prove_fft, Ft255, Blake2b, 20);
+def_bench!(prove_fft, Ft255, Blake2b, 24);
+
+def_bench!(verify_fft, Ft255, Blake2b, 16);
+def_bench!(verify_fft, Ft255, Blake2b, 20);
+def_bench!(verify_fft, Ft255, Blake2b, 24);

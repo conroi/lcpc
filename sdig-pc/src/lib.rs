@@ -23,7 +23,6 @@ use ff::Field;
 use fffft::{FFTError, FFTPrecomp, FieldFFT};
 use lcpc2d::{def_labels, FieldHash, LcCommit, LcEncoding, LcEvalProof};
 use num_traits::Num;
-use serde::Serialize;
 use sprs::{CsMat, MulAcc};
 
 pub mod encode;
@@ -83,7 +82,7 @@ where
 
 impl<Ft> LcEncoding for SdigEncoding<Ft>
 where
-    Ft: Field + FieldHash + MulAcc + Num + Serialize,
+    Ft: Field + FieldHash + MulAcc + Num,
 {
     type F = Ft;
     type Err = std::io::Error;
@@ -178,7 +177,7 @@ where
 
 impl<Ft> LcEncoding for SdigFFTEncoding<Ft>
 where
-    Ft: FieldFFT + FieldHash + MulAcc + Num + Serialize,
+    Ft: FieldFFT + FieldHash + MulAcc + Num,
 {
     type F = Ft;
     type Err = FFTError;
