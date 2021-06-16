@@ -1,0 +1,20 @@
+[package]
+name = "test-fields"
+version = "0.1.0"
+edition = "2018"
+authors = ["kwantam <kwantam@gmail.com>"]
+description = "fields for testing polycommits"
+license = "Apache-2.0"
+repository = "https://github.com/kwantam/lcpc"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bitvec = "0.22"
+byteorder = "1"
+ff = { version = "0.10", features = ["derive"] }
+ff-derive-num = "0.1"
+num-traits = "0.2"
+rand_core = "0.6"
+serde = { version = "1.0", features = ["derive"] }
+subtle = "2.2"
