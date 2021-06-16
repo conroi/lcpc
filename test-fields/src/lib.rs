@@ -20,18 +20,6 @@ pub mod ft63 {
     pub struct Ft63([u64; 1]);
 }
 
-pub mod ft96 {
-    use ff::PrimeField;
-    use ff_derive_num::Num;
-    use serde::{Deserialize, Serialize};
-
-    #[derive(PrimeField, Num, Deserialize, Serialize)]
-    #[PrimeFieldModulus = "70386805592835581672624750593"]
-    #[PrimeFieldGenerator = "17"]
-    #[PrimeFieldReprEndianness = "little"]
-    pub struct Ft96([u64; 2]);
-}
-
 pub mod ft127 {
     use ff::PrimeField;
     use ff_derive_num::Num;
