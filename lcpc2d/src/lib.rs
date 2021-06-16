@@ -14,7 +14,7 @@ lcpc2d is a polynomial commitment scheme based on linear codes
 
 use digest::{Digest, Output};
 use err_derive::Error;
-use ff::Field;
+use ff::{Field, PrimeField};
 use merlin::Transcript;
 use rand::{
     distributions::{Distribution, Uniform},
@@ -46,6 +46,14 @@ pub trait FieldHash {
     /// Update the [merlin::Transcript] `t` with the `HashRepr` of `Self` with label `l`
     fn transcript_update(&self, t: &mut Transcript, l: &'static [u8]) {
         t.append_message(l, self.to_hash_repr().as_ref())
+    }
+}
+
+impl<T: PrimeField> FieldHash for T {
+    type HashRepr = T::Repr;
+
+    fn to_hash_repr(&self) -> Self::HashRepr {
+        PrimeField::to_repr(self)
     }
 }
 

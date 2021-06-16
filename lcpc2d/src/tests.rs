@@ -9,37 +9,16 @@
 
 use super::{def_labels, FieldHash, LcCommit, LcEncoding, LcEvalProof, LcRoot};
 
+use blake2::Blake2b;
 use digest::Output;
 use ff::Field;
 use fffft::{FFTError, FFTPrecomp, FieldFFT};
-use ft::*;
 use itertools::iterate;
 use merlin::Transcript;
-use rand::Rng;
-use rand::SeedableRng;
+use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use sha3::Sha3_256;
 use std::iter::repeat_with;
-
-mod ft {
-    use crate::FieldHash;
-    use ff::PrimeField;
-    use serde::{Deserialize, Serialize};
-
-    #[derive(PrimeField, Serialize, Deserialize)]
-    #[PrimeFieldModulus = "70386805592835581672624750593"]
-    #[PrimeFieldGenerator = "17"]
-    #[PrimeFieldReprEndianness = "little"]
-    pub struct Ft([u64; 2]);
-
-    impl FieldHash for Ft {
-        type HashRepr = <Ft as PrimeField>::Repr;
-
-        fn to_hash_repr(&self) -> Self::HashRepr {
-            PrimeField::to_repr(self)
-        }
-    }
-}
+use test_fields::ft96::*;
 
 #[derive(Clone, Debug)]
 struct LigeroEncoding<Ft> {
@@ -166,7 +145,7 @@ fn eval_outer() {
 
     let test_comm = random_comm();
     let mut rng = rand::thread_rng();
-    let tensor: Vec<Ft> = repeat_with(|| Ft::random(&mut rng))
+    let tensor: Vec<Ft96> = repeat_with(|| Ft96::random(&mut rng))
         .take(test_comm.n_rows)
         .collect();
 
@@ -192,12 +171,12 @@ fn open_column() {
     for _ in 0..64 {
         let col_num = rng.gen::<usize>() % test_comm.n_cols;
         let column = open_column(&test_comm, col_num).unwrap();
-        assert!(verify_column::<Sha3_256, _>(
+        assert!(verify_column::<Blake2b, _>(
             &column,
             col_num,
             root.as_ref(),
             &[],
-            &Ft::zero(),
+            &Ft96::zero(),
         ));
     }
 }
@@ -207,41 +186,43 @@ fn commit() {
     use super::{commit, eval_outer, eval_outer_fft};
 
     let (coeffs, rho) = random_coeffs_rho();
-    let enc = LigeroEncoding::<Ft>::new(coeffs.len(), rho);
-    let comm = commit::<Sha3_256, LigeroEncoding<_>>(&coeffs, &enc).unwrap();
+    let enc = LigeroEncoding::<Ft96>::new(coeffs.len(), rho);
+    let comm = commit::<Blake2b, LigeroEncoding<_>>(&coeffs, &enc).unwrap();
 
-    let x = Ft::random(&mut rand::thread_rng());
+    let x = Ft96::random(&mut rand::thread_rng());
 
     let eval = comm
         .coeffs
         .iter()
-        .zip(iterate(Ft::one(), |&v| v * x).take(coeffs.len()))
-        .fold(Ft::zero(), |acc, (c, r)| acc + *c * r);
+        .zip(iterate(Ft96::one(), |&v| v * x).take(coeffs.len()))
+        .fold(Ft96::zero(), |acc, (c, r)| acc + *c * r);
 
-    let roots_lo: Vec<Ft> = iterate(Ft::one(), |&v| v * x)
+    let roots_lo: Vec<Ft96> = iterate(Ft96::one(), |&v| v * x)
         .take(comm.n_per_row)
         .collect();
-    let roots_hi: Vec<Ft> = {
+    let roots_hi: Vec<Ft96> = {
         let xr = x * roots_lo.last().unwrap();
-        iterate(Ft::one(), |&v| v * xr).take(comm.n_rows).collect()
+        iterate(Ft96::one(), |&v| v * xr)
+            .take(comm.n_rows)
+            .collect()
     };
     let coeffs_flattened = eval_outer(&comm, &roots_hi[..]).unwrap();
     let eval2 = coeffs_flattened
         .iter()
         .zip(roots_lo.iter())
-        .fold(Ft::zero(), |acc, (c, r)| acc + *c * r);
+        .fold(Ft96::zero(), |acc, (c, r)| acc + *c * r);
     assert_eq!(eval, eval2);
 
     let mut poly_fft = eval_outer_fft(&comm, &roots_hi[..]).unwrap();
-    <Ft as FieldFFT>::ifft_oi(&mut poly_fft).unwrap();
+    <Ft96 as FieldFFT>::ifft_oi(&mut poly_fft).unwrap();
     assert!(poly_fft
         .iter()
         .skip(comm.n_per_row)
-        .all(|&v| v == Ft::zero()));
+        .all(|&v| v == Ft96::zero()));
     let eval3 = poly_fft
         .iter()
         .zip(roots_lo.iter())
-        .fold(Ft::zero(), |acc, (c, r)| acc + *c * r);
+        .fold(Ft96::zero(), |acc, (c, r)| acc + *c * r);
     assert_eq!(eval2, eval3);
 }
 
@@ -251,31 +232,33 @@ fn end_to_end() {
 
     // commit to a random polynomial at a random rate
     let (coeffs, rho) = random_coeffs_rho();
-    let enc = LigeroEncoding::<Ft>::new(coeffs.len(), rho);
+    let enc = LigeroEncoding::<Ft96>::new(coeffs.len(), rho);
     let n_degree_tests = 2;
     let n_col_opens = 128usize;
-    let comm = commit::<Sha3_256, LigeroEncoding<_>>(&coeffs, &enc).unwrap();
+    let comm = commit::<Blake2b, LigeroEncoding<_>>(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root();
 
     // evaluate the random polynomial we just generated at a random point x
-    let x = Ft::random(&mut rand::thread_rng());
+    let x = Ft96::random(&mut rand::thread_rng());
     let eval = comm
         .coeffs
         .iter()
-        .zip(iterate(Ft::one(), |&v| v * x).take(coeffs.len()))
-        .fold(Ft::zero(), |acc, (c, r)| acc + *c * r);
+        .zip(iterate(Ft96::one(), |&v| v * x).take(coeffs.len()))
+        .fold(Ft96::zero(), |acc, (c, r)| acc + *c * r);
 
     // compute the outer and inner tensors for powers of x
     // NOTE: we treat coeffs as a univariate polynomial, but it doesn't
     // really matter --- the only difference from a multilinear is the
     // way we compute outer_tensor and inner_tensor from the eval point
-    let inner_tensor: Vec<Ft> = iterate(Ft::one(), |&v| v * x)
+    let inner_tensor: Vec<Ft96> = iterate(Ft96::one(), |&v| v * x)
         .take(comm.n_per_row)
         .collect();
-    let outer_tensor: Vec<Ft> = {
+    let outer_tensor: Vec<Ft96> = {
         let xr = x * inner_tensor.last().unwrap();
-        iterate(Ft::one(), |&v| v * xr).take(comm.n_rows).collect()
+        iterate(Ft96::one(), |&v| v * xr)
+            .take(comm.n_rows)
+            .collect()
     };
 
     // compute an evaluation proof
@@ -283,7 +266,7 @@ fn end_to_end() {
     tr1.append_message(b"polycommit", root.as_ref());
     tr1.append_message(b"rate", &rho.to_be_bytes()[..]);
     tr1.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
-    let pf: LigeroEvalProof<Sha3_256, Ft> = prove(
+    let pf: LigeroEvalProof<Blake2b, Ft96> = prove(
         &comm,
         &outer_tensor[..],
         &enc,
@@ -293,7 +276,7 @@ fn end_to_end() {
     )
     .unwrap();
     let encoded: Vec<u8> = bincode::serialize(&pf).unwrap();
-    let encroot: Vec<u8> = bincode::serialize(&LcRoot::<Sha3_256, LigeroEncoding<Ft>> {
+    let encroot: Vec<u8> = bincode::serialize(&LcRoot::<Blake2b, LigeroEncoding<Ft96>> {
         root: *root.as_ref(),
         _p: Default::default(),
     })
@@ -304,7 +287,7 @@ fn end_to_end() {
     tr2.append_message(b"polycommit", root.as_ref());
     tr2.append_message(b"rate", &rho.to_be_bytes()[..]);
     tr2.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
-    let enc2 = LigeroEncoding::<Ft>::new_from_dims(pf.get_n_per_row(), pf.get_n_cols());
+    let enc2 = LigeroEncoding::<Ft96>::new_from_dims(pf.get_n_per_row(), pf.get_n_cols());
     let res = verify(
         root.as_ref(),
         &outer_tensor[..],
@@ -317,13 +300,14 @@ fn end_to_end() {
     )
     .unwrap();
 
-    let root2 = bincode::deserialize::<LcRoot<Sha3_256, LigeroEncoding<Ft>>>(&encroot[..]).unwrap();
-    let pf2: LigeroEvalProof<Sha3_256, Ft> = bincode::deserialize(&encoded[..]).unwrap();
+    let root2 =
+        bincode::deserialize::<LcRoot<Blake2b, LigeroEncoding<Ft96>>>(&encroot[..]).unwrap();
+    let pf2: LigeroEvalProof<Blake2b, Ft96> = bincode::deserialize(&encoded[..]).unwrap();
     let mut tr3 = Transcript::new(b"test transcript");
     tr3.append_message(b"polycommit", root.as_ref());
     tr3.append_message(b"rate", &rho.to_be_bytes()[..]);
     tr3.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
-    let enc3 = LigeroEncoding::<Ft>::new_from_dims(pf2.get_n_per_row(), pf2.get_n_cols());
+    let enc3 = LigeroEncoding::<Ft96>::new_from_dims(pf2.get_n_per_row(), pf2.get_n_cols());
     let res2 = verify(
         root2.as_ref(),
         &outer_tensor[..],
@@ -346,31 +330,33 @@ fn end_to_end_two_proofs() {
 
     // commit to a random polynomial at a random rate
     let (coeffs, rho) = random_coeffs_rho();
-    let enc = LigeroEncoding::<Ft>::new(coeffs.len(), rho);
+    let enc = LigeroEncoding::<Ft96>::new(coeffs.len(), rho);
     let n_degree_tests = 1;
     let n_col_opens = 128usize;
-    let comm = commit::<Sha3_256, LigeroEncoding<_>>(&coeffs, &enc).unwrap();
+    let comm = commit::<Blake2b, LigeroEncoding<_>>(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root();
 
     // evaluate the random polynomial we just generated at a random point x
-    let x = Ft::random(&mut rand::thread_rng());
+    let x = Ft96::random(&mut rand::thread_rng());
     let eval = comm
         .coeffs
         .iter()
-        .zip(iterate(Ft::one(), |&v| v * x).take(coeffs.len()))
-        .fold(Ft::zero(), |acc, (c, r)| acc + *c * r);
+        .zip(iterate(Ft96::one(), |&v| v * x).take(coeffs.len()))
+        .fold(Ft96::zero(), |acc, (c, r)| acc + *c * r);
 
     // compute the outer and inner tensors for powers of x
     // NOTE: we treat coeffs as a univariate polynomial, but it doesn't
     // really matter --- the only difference from a multilinear is the
     // way we compute outer_tensor and inner_tensor from the eval point
-    let inner_tensor: Vec<Ft> = iterate(Ft::one(), |&v| v * x)
+    let inner_tensor: Vec<Ft96> = iterate(Ft96::one(), |&v| v * x)
         .take(comm.n_per_row)
         .collect();
-    let outer_tensor: Vec<Ft> = {
+    let outer_tensor: Vec<Ft96> = {
         let xr = x * inner_tensor.last().unwrap();
-        iterate(Ft::one(), |&v| v * xr).take(comm.n_rows).collect()
+        iterate(Ft96::one(), |&v| v * xr)
+            .take(comm.n_rows)
+            .collect()
     };
 
     // compute an evaluation proof
@@ -378,7 +364,7 @@ fn end_to_end_two_proofs() {
     tr1.append_message(b"polycommit", root.as_ref());
     tr1.append_message(b"rate", &rho.to_be_bytes()[..]);
     tr1.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
-    let pf = prove::<Sha3_256, _>(
+    let pf = prove::<Blake2b, _>(
         &comm,
         &outer_tensor[..],
         &enc,
@@ -392,14 +378,14 @@ fn end_to_end_two_proofs() {
         let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
         tr1.challenge_bytes(b"ligero-pc//challenge", &mut key);
         let mut deg_test_rng = ChaCha20Rng::from_seed(key);
-        Ft::random(&mut deg_test_rng)
+        Ft96::random(&mut deg_test_rng)
     };
 
     // produce a second proof with the same transcript
     tr1.append_message(b"polycommit", root.as_ref());
     tr1.append_message(b"rate", &rho.to_be_bytes()[..]);
     tr1.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
-    let pf2 = prove::<Sha3_256, _>(
+    let pf2 = prove::<Blake2b, _>(
         &comm,
         &outer_tensor[..],
         &enc,
@@ -414,7 +400,7 @@ fn end_to_end_two_proofs() {
     tr2.append_message(b"polycommit", root.as_ref());
     tr2.append_message(b"rate", &rho.to_be_bytes()[..]);
     tr2.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
-    let enc2 = LigeroEncoding::<Ft>::new_from_dims(pf.get_n_per_row(), pf.get_n_cols());
+    let enc2 = LigeroEncoding::<Ft96>::new_from_dims(pf.get_n_per_row(), pf.get_n_cols());
     let res = verify(
         root.as_ref(),
         &outer_tensor[..],
@@ -432,7 +418,7 @@ fn end_to_end_two_proofs() {
         let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
         tr2.challenge_bytes(b"ligero-pc//challenge", &mut key);
         let mut deg_test_rng = ChaCha20Rng::from_seed(key);
-        Ft::random(&mut deg_test_rng)
+        Ft96::random(&mut deg_test_rng)
     };
     assert_eq!(
         challenge_after_first_proof_prover,
@@ -443,7 +429,7 @@ fn end_to_end_two_proofs() {
     tr2.append_message(b"polycommit", root.as_ref());
     tr2.append_message(b"rate", &rho.to_be_bytes()[..]);
     tr2.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
-    let enc3 = LigeroEncoding::<Ft>::new_from_dims(pf2.get_n_per_row(), pf2.get_n_cols());
+    let enc3 = LigeroEncoding::<Ft96>::new_from_dims(pf2.get_n_per_row(), pf2.get_n_cols());
     let res2 = verify(
         root.as_ref(),
         &outer_tensor[..],
@@ -459,7 +445,7 @@ fn end_to_end_two_proofs() {
     assert_eq!(res2, eval);
 }
 
-fn random_coeffs_rho() -> (Vec<Ft>, f64) {
+fn random_coeffs_rho() -> (Vec<Ft96>, f64) {
     let mut rng = rand::thread_rng();
 
     let lgl = 8 + rng.gen::<usize>() % 8;
@@ -467,40 +453,40 @@ fn random_coeffs_rho() -> (Vec<Ft>, f64) {
     let len = len_base + (rng.gen::<usize>() % len_base);
 
     (
-        repeat_with(|| Ft::random(&mut rng)).take(len).collect(),
+        repeat_with(|| Ft96::random(&mut rng)).take(len).collect(),
         rng.gen_range(0.1f64..0.9f64),
     )
 }
 
-fn random_comm() -> LigeroCommit<Sha3_256, Ft> {
+fn random_comm() -> LigeroCommit<Blake2b, Ft96> {
     let mut rng = rand::thread_rng();
 
     let lgl = 8 + rng.gen::<usize>() % 8;
     let len_base = 1 << (lgl - 1);
     let len = len_base + (rng.gen::<usize>() % len_base);
     let rho = rng.gen_range(0.1f64..0.9f64);
-    let (n_rows, n_per_row, n_cols) = LigeroEncoding::<Ft>::_get_dims(len, rho).unwrap();
+    let (n_rows, n_per_row, n_cols) = LigeroEncoding::<Ft96>::_get_dims(len, rho).unwrap();
 
     let coeffs_len = (n_per_row - 1) * n_rows + 1 + (rng.gen::<usize>() % n_rows);
     let coeffs = {
-        let mut tmp = repeat_with(|| Ft::random(&mut rng))
+        let mut tmp = repeat_with(|| Ft96::random(&mut rng))
             .take(coeffs_len)
-            .collect::<Vec<Ft>>();
-        tmp.resize(n_per_row * n_rows, Ft::zero());
+            .collect::<Vec<Ft96>>();
+        tmp.resize(n_per_row * n_rows, Ft96::zero());
         tmp
     };
 
     let comm_len = n_rows * n_cols;
-    let comm: Vec<Ft> = repeat_with(|| Ft::random(&mut rng))
+    let comm: Vec<Ft96> = repeat_with(|| Ft96::random(&mut rng))
         .take(comm_len)
         .collect();
 
-    LigeroCommit::<Sha3_256, Ft> {
+    LigeroCommit::<Blake2b, Ft96> {
         comm,
         coeffs,
         n_rows,
         n_cols,
         n_per_row,
-        hashes: vec![<Output<Sha3_256> as Default>::default(); 2 * n_cols - 1],
+        hashes: vec![<Output<Blake2b> as Default>::default(); 2 * n_cols - 1],
     }
 }
