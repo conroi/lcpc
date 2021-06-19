@@ -1,0 +1,104 @@
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded paste v1.0.5
+   Compiling paste v1.0.5
+   Compiling test-fields v0.1.0 (/home/kwantam/git/github.com/lcpc/test-fields)
+   Compiling lcpc2d v0.1.0 (/home/kwantam/git/github.com/lcpc/lcpc2d)
+   Compiling sdig-pc v0.1.0 (/home/kwantam/git/github.com/lcpc/sdig-pc)
+   Compiling ligero-pc v0.1.0 (/home/kwantam/git/github.com/lcpc/ligero-pc)
+    Finished bench [optimized] target(s) in 24.67s
+     Running unittests (target/release/deps/lcpc2d-b663df2a57044731)
+
+running 7 tests
+test tests::commit ... ignored
+test tests::end_to_end ... ignored
+test tests::end_to_end_two_proofs ... ignored
+test tests::eval_outer ... ignored
+test tests::log2 ... ignored
+test tests::merkleize ... ignored
+test tests::open_column ... ignored
+
+test result: ok. 0 passed; 0 failed; 7 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests (target/release/deps/ligero_pc-3b42764d6f488188)
+
+running 21 tests
+test tests::end_to_end ... ignored
+test tests::end_to_end_two_proofs ... ignored
+test tests::get_dims ... ignored
+test bench::commit_Ft127_Blake2b_16 ... bench:  16,600,990 ns/iter (+/- 2,878,704)
+test bench::commit_Ft127_Blake2b_20 ... bench: 128,112,292 ns/iter (+/- 8,188,157)
+test bench::commit_Ft127_Blake2b_24 ... bench: 1,630,135,414 ns/iter (+/- 32,647,328)
+test bench::commit_Ft255_Blake2b_16 ... bench:  20,635,748 ns/iter (+/- 3,129,681)
+test bench::commit_Ft255_Blake2b_20 ... bench: 196,554,467 ns/iter (+/- 9,651,190)
+test bench::commit_Ft255_Blake2b_24 ... bench: 2,669,809,695 ns/iter (+/- 72,998,096)
+test bench::prove_Ft127_Blake2b_16  ... bench:   1,895,085 ns/iter (+/- 205,748)
+test bench::prove_Ft127_Blake2b_20  ... bench:   7,306,041 ns/iter (+/- 376,819)
+test bench::prove_Ft127_Blake2b_24  ... bench:  89,929,167 ns/iter (+/- 1,695,286)
+test bench::prove_Ft255_Blake2b_16  ... bench:   3,877,661 ns/iter (+/- 464,621)
+test bench::prove_Ft255_Blake2b_20  ... bench:  13,576,977 ns/iter (+/- 802,437)
+test bench::prove_Ft255_Blake2b_24  ... bench: 157,553,293 ns/iter (+/- 6,118,472)
+test bench::verify_Ft127_Blake2b_16 ... bench:   2,302,357 ns/iter (+/- 74,207)
+test bench::verify_Ft127_Blake2b_20 ... bench:   4,596,000 ns/iter (+/- 340,588)
+test bench::verify_Ft127_Blake2b_24 ... bench:  10,950,512 ns/iter (+/- 863,512)
+test bench::verify_Ft255_Blake2b_16 ... bench:   2,695,979 ns/iter (+/- 176,880)
+test bench::verify_Ft255_Blake2b_20 ... bench:   5,863,708 ns/iter (+/- 486,196)
+test bench::verify_Ft255_Blake2b_24 ... bench:  16,354,918 ns/iter (+/- 1,910,728)
+
+test result: ok. 0 passed; 0 failed; 3 ignored; 18 measured; 0 filtered out; finished in 1539.76s
+
+     Running unittests (target/release/deps/sdig_pc-cf3876387f6b00ae)
+
+running 43 tests
+test tests::end_to_end_one_proof ... ignored
+test tests::end_to_end_two_proofs ... ignored
+test tests::fft_end_to_end_one_proof ... ignored
+test tests::fft_end_to_end_two_proofs ... ignored
+test tests::sprs_playground ... ignored
+test tests::test_matgen_check_seed ... ignored
+test tests::test_matgen_encode ... ignored
+test bench::commit_Ft127_Blake2b_16     ... bench:   6,556,028 ns/iter (+/- 701,233)
+test bench::commit_Ft127_Blake2b_20     ... bench:  62,222,378 ns/iter (+/- 7,704,411)
+test bench::commit_Ft127_Blake2b_24     ... bench: 731,596,625 ns/iter (+/- 15,806,704)
+test bench::commit_Ft255_Blake2b_16     ... bench:  12,628,265 ns/iter (+/- 2,092,859)
+test bench::commit_Ft255_Blake2b_20     ... bench: 124,273,652 ns/iter (+/- 6,240,889)
+test bench::commit_Ft255_Blake2b_24     ... bench: 1,730,017,278 ns/iter (+/- 26,848,830)
+test bench::commit_fft_Ft127_Blake2b_16 ... bench:   8,067,021 ns/iter (+/- 901,423)
+test bench::commit_fft_Ft127_Blake2b_20 ... bench:  65,334,674 ns/iter (+/- 7,653,134)
+test bench::commit_fft_Ft127_Blake2b_24 ... bench: 739,048,944 ns/iter (+/- 9,582,995)
+test bench::commit_fft_Ft255_Blake2b_16 ... bench:  12,428,585 ns/iter (+/- 1,441,428)
+test bench::commit_fft_Ft255_Blake2b_20 ... bench: 123,150,815 ns/iter (+/- 5,665,504)
+test bench::commit_fft_Ft255_Blake2b_24 ... bench: 1,735,235,690 ns/iter (+/- 29,751,098)
+test bench::prove_Ft127_Blake2b_16      ... bench:   1,944,009 ns/iter (+/- 216,447)
+test bench::prove_Ft127_Blake2b_20      ... bench:   6,882,861 ns/iter (+/- 132,254)
+test bench::prove_Ft127_Blake2b_24      ... bench:  85,943,358 ns/iter (+/- 1,791,298)
+test bench::prove_Ft255_Blake2b_16      ... bench:   3,701,674 ns/iter (+/- 526,608)
+test bench::prove_Ft255_Blake2b_20      ... bench:  13,688,847 ns/iter (+/- 1,201,212)
+test bench::prove_Ft255_Blake2b_24      ... bench: 149,996,628 ns/iter (+/- 7,372,691)
+test bench::prove_fft_Ft127_Blake2b_16  ... bench:   1,845,323 ns/iter (+/- 236,111)
+test bench::prove_fft_Ft127_Blake2b_20  ... bench:   6,801,946 ns/iter (+/- 478,572)
+test bench::prove_fft_Ft127_Blake2b_24  ... bench:  86,581,161 ns/iter (+/- 2,074,939)
+test bench::prove_fft_Ft255_Blake2b_16  ... bench:   4,094,252 ns/iter (+/- 567,884)
+test bench::prove_fft_Ft255_Blake2b_20  ... bench:  13,288,261 ns/iter (+/- 337,113)
+test bench::prove_fft_Ft255_Blake2b_24  ... bench: 150,178,873 ns/iter (+/- 8,499,325)
+test bench::verify_Ft127_Blake2b_16     ... bench:   1,109,183 ns/iter (+/- 529,677)
+test bench::verify_Ft127_Blake2b_20     ... bench:   3,475,330 ns/iter (+/- 793,795)
+test bench::verify_Ft127_Blake2b_24     ... bench:  12,646,113 ns/iter (+/- 3,500,950)
+test bench::verify_Ft255_Blake2b_16     ... bench:   2,227,620 ns/iter (+/- 768,754)
+test bench::verify_Ft255_Blake2b_20     ... bench:   7,509,043 ns/iter (+/- 1,433,549)
+test bench::verify_Ft255_Blake2b_24     ... bench:  28,287,947 ns/iter (+/- 5,436,283)
+test bench::verify_fft_Ft127_Blake2b_16 ... bench:   1,810,729 ns/iter (+/- 147,162)
+test bench::verify_fft_Ft127_Blake2b_20 ... bench:   4,540,077 ns/iter (+/- 1,592,046)
+test bench::verify_fft_Ft127_Blake2b_24 ... bench:  14,121,705 ns/iter (+/- 4,503,385)
+test bench::verify_fft_Ft255_Blake2b_16 ... bench:   3,105,309 ns/iter (+/- 219,907)
+test bench::verify_fft_Ft255_Blake2b_20 ... bench:   8,985,088 ns/iter (+/- 3,256,436)
+test bench::verify_fft_Ft255_Blake2b_24 ... bench:  31,047,189 ns/iter (+/- 5,340,872)
+
+test result: ok. 0 passed; 0 failed; 7 ignored; 36 measured; 0 filtered out; finished in 1885.17s
+
+     Running unittests (target/release/deps/test_fields-a87f8429e4fdfa10)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

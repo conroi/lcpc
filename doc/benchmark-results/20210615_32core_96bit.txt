@@ -1,0 +1,119 @@
+   Compiling ligero-pc v0.1.0 (/home/kwantam/git/github.com/lcpc/ligero-pc)
+   Compiling sdig-pc v0.1.0 (/home/kwantam/git/github.com/lcpc/sdig-pc)
+    Finished bench [optimized] target(s) in 6.20s
+     Running unittests (target/release/deps/lcpc2d-9a30673077f740d3)
+
+running 7 tests
+test tests::commit ... ignored
+test tests::end_to_end ... ignored
+test tests::end_to_end_two_proofs ... ignored
+test tests::eval_outer ... ignored
+test tests::log2 ... ignored
+test tests::merkleize ... ignored
+test tests::open_column ... ignored
+
+test result: ok. 0 passed; 0 failed; 7 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests (target/release/deps/ligero_pc-74cbc2f02a18a48d)
+
+running 30 tests
+test tests::end_to_end ... ignored
+test tests::end_to_end_two_proofs ... ignored
+test tests::get_dims ... ignored
+test bench::commit_blake2b_16 ... bench:  15,004,011 ns/iter (+/- 2,962,539)
+test bench::commit_blake2b_20 ... bench: 121,462,300 ns/iter (+/- 7,529,342)
+test bench::commit_blake2b_24 ... bench: 1,519,450,139 ns/iter (+/- 41,641,299)
+test bench::commit_blake3_16  ... bench:  14,993,120 ns/iter (+/- 2,910,126)
+test bench::commit_blake3_20  ... bench: 122,952,512 ns/iter (+/- 8,989,981)
+test bench::commit_blake3_24  ... bench: 1,517,129,873 ns/iter (+/- 32,579,079)
+test bench::commit_sha3_16    ... bench:  15,473,425 ns/iter (+/- 2,591,210)
+test bench::commit_sha3_20    ... bench: 130,716,311 ns/iter (+/- 6,827,712)
+test bench::commit_sha3_24    ... bench: 1,630,389,407 ns/iter (+/- 28,806,763)
+test bench::prove_blake2b_16  ... bench:   1,924,085 ns/iter (+/- 230,257)
+test bench::prove_blake2b_20  ... bench:   7,145,150 ns/iter (+/- 486,254)
+test bench::prove_blake2b_24  ... bench:  84,199,890 ns/iter (+/- 1,409,881)
+test bench::prove_blake3_16   ... bench:   2,009,864 ns/iter (+/- 263,832)
+test bench::prove_blake3_20   ... bench:   7,342,623 ns/iter (+/- 449,653)
+test bench::prove_blake3_24   ... bench:  82,296,838 ns/iter (+/- 1,758,116)
+test bench::prove_sha3_16     ... bench:   1,955,481 ns/iter (+/- 218,552)
+test bench::prove_sha3_20     ... bench:   7,369,919 ns/iter (+/- 895,279)
+test bench::prove_sha3_24     ... bench:  78,348,262 ns/iter (+/- 6,930,383)
+test bench::verify_blake2b_16 ... bench:   2,244,529 ns/iter (+/- 111,722)
+test bench::verify_blake2b_20 ... bench:   4,444,351 ns/iter (+/- 321,136)
+test bench::verify_blake2b_24 ... bench:  10,300,510 ns/iter (+/- 812,946)
+test bench::verify_blake3_16  ... bench:   2,235,043 ns/iter (+/- 48,258)
+test bench::verify_blake3_20  ... bench:   4,465,712 ns/iter (+/- 349,471)
+test bench::verify_blake3_24  ... bench:  10,702,833 ns/iter (+/- 802,853)
+test bench::verify_sha3_16    ... bench:   2,329,261 ns/iter (+/- 182,778)
+test bench::verify_sha3_20    ... bench:   4,729,683 ns/iter (+/- 289,542)
+test bench::verify_sha3_24    ... bench:  11,103,968 ns/iter (+/- 838,165)
+
+test result: ok. 0 passed; 0 failed; 3 ignored; 27 measured; 0 filtered out; finished in 1689.42s
+
+     Running unittests (target/release/deps/sdig_pc-03dd27a6b477a608)
+
+running 61 tests
+test tests::end_to_end_one_proof ... ignored
+test tests::end_to_end_two_proofs ... ignored
+test tests::fft_end_to_end_one_proof ... ignored
+test tests::fft_end_to_end_two_proofs ... ignored
+test tests::sprs_playground ... ignored
+test tests::test_matgen_check_seed ... ignored
+test tests::test_matgen_encode ... ignored
+test bench::commit_blake2b_16     ... bench:   5,445,892 ns/iter (+/- 697,409)
+test bench::commit_blake2b_20     ... bench:  56,481,116 ns/iter (+/- 5,071,299)
+test bench::commit_blake2b_24     ... bench: 648,432,891 ns/iter (+/- 14,838,334)
+test bench::commit_blake3_16      ... bench:   5,449,196 ns/iter (+/- 604,359)
+test bench::commit_blake3_20      ... bench:  57,261,251 ns/iter (+/- 3,985,551)
+test bench::commit_blake3_24      ... bench: 664,550,744 ns/iter (+/- 25,438,884)
+test bench::commit_fft_blake2b_16 ... bench:   6,629,748 ns/iter (+/- 904,575)
+test bench::commit_fft_blake2b_20 ... bench:  57,525,428 ns/iter (+/- 7,068,886)
+test bench::commit_fft_blake2b_24 ... bench: 678,543,679 ns/iter (+/- 23,490,959)
+test bench::commit_fft_blake3_16  ... bench:   6,539,062 ns/iter (+/- 799,029)
+test bench::commit_fft_blake3_20  ... bench:  56,902,336 ns/iter (+/- 6,120,216)
+test bench::commit_fft_blake3_24  ... bench: 669,453,474 ns/iter (+/- 24,608,715)
+test bench::commit_fft_sha3_16    ... bench:   6,603,468 ns/iter (+/- 1,433,048)
+test bench::commit_fft_sha3_20    ... bench:  59,706,372 ns/iter (+/- 8,195,892)
+test bench::commit_fft_sha3_24    ... bench: 745,460,251 ns/iter (+/- 30,231,053)
+test bench::commit_sha3_16        ... bench:   5,897,423 ns/iter (+/- 826,681)
+test bench::commit_sha3_20        ... bench:  60,218,884 ns/iter (+/- 6,298,818)
+test bench::commit_sha3_24        ... bench: 744,283,014 ns/iter (+/- 41,078,151)
+test bench::prove_blake2b_16      ... bench:   1,847,995 ns/iter (+/- 190,541)
+test bench::prove_blake2b_20      ... bench:   6,900,973 ns/iter (+/- 1,717,212)
+test bench::prove_blake2b_24      ... bench:  86,635,599 ns/iter (+/- 19,089,014)
+test bench::prove_blake3_16       ... bench:   1,860,287 ns/iter (+/- 254,939)
+test bench::prove_blake3_20       ... bench:   6,802,633 ns/iter (+/- 298,801)
+test bench::prove_blake3_24       ... bench:  82,169,543 ns/iter (+/- 2,854,636)
+test bench::prove_fft_blake2b_16  ... bench:   1,877,153 ns/iter (+/- 256,799)
+test bench::prove_fft_blake2b_20  ... bench:   7,191,787 ns/iter (+/- 752,561)
+test bench::prove_fft_blake2b_24  ... bench:  79,962,046 ns/iter (+/- 1,458,279)
+test bench::prove_fft_blake3_16   ... bench:   1,882,583 ns/iter (+/- 250,477)
+test bench::prove_fft_blake3_20   ... bench:   6,569,587 ns/iter (+/- 198,692)
+test bench::prove_fft_blake3_24   ... bench:  80,467,456 ns/iter (+/- 1,181,673)
+test bench::prove_fft_sha3_16     ... bench:   1,896,344 ns/iter (+/- 207,943)
+test bench::prove_fft_sha3_20     ... bench:   6,560,262 ns/iter (+/- 155,173)
+test bench::prove_fft_sha3_24     ... bench:  79,600,073 ns/iter (+/- 1,463,308)
+test bench::prove_sha3_16         ... bench:   1,812,396 ns/iter (+/- 182,378)
+test bench::prove_sha3_20         ... bench:   6,698,506 ns/iter (+/- 494,573)
+test bench::prove_sha3_24         ... bench:  83,476,374 ns/iter (+/- 3,266,371)
+test bench::verify_blake2b_16     ... bench:   1,025,727 ns/iter (+/- 233,966)
+test bench::verify_blake2b_20     ... bench:   3,343,638 ns/iter (+/- 1,494,317)
+test bench::verify_blake2b_24     ... bench:  12,055,678 ns/iter (+/- 2,265,761)
+test bench::verify_blake3_16      ... bench:     998,865 ns/iter (+/- 201,750)
+test bench::verify_blake3_20      ... bench:   3,318,986 ns/iter (+/- 785,100)
+test bench::verify_blake3_24      ... bench:  12,287,465 ns/iter (+/- 3,942,785)
+test bench::verify_fft_blake2b_16 ... bench:   1,758,352 ns/iter (+/- 133,078)
+test bench::verify_fft_blake2b_20 ... bench:   4,344,436 ns/iter (+/- 854,626)
+test bench::verify_fft_blake2b_24 ... bench:  13,747,566 ns/iter (+/- 4,825,295)
+test bench::verify_fft_blake3_16  ... bench:   1,780,524 ns/iter (+/- 251,175)
+test bench::verify_fft_blake3_20  ... bench:   4,878,168 ns/iter (+/- 1,813,755)
+test bench::verify_fft_blake3_24  ... bench:  13,893,600 ns/iter (+/- 5,336,229)
+test bench::verify_fft_sha3_16    ... bench:   1,887,660 ns/iter (+/- 133,887)
+test bench::verify_fft_sha3_20    ... bench:   4,794,769 ns/iter (+/- 493,932)
+test bench::verify_fft_sha3_24    ... bench:  16,336,654 ns/iter (+/- 4,365,902)
+test bench::verify_sha3_16        ... bench:   1,186,813 ns/iter (+/- 503,931)
+test bench::verify_sha3_20        ... bench:   3,793,306 ns/iter (+/- 972,073)
+test bench::verify_sha3_24        ... bench:  14,571,840 ns/iter (+/- 4,107,752)
+
+test result: ok. 0 passed; 0 failed; 7 ignored; 54 measured; 0 filtered out; finished in 1689.62s
+
