@@ -67,8 +67,6 @@ where
     (precodes, postcodes)
 }
 
-// this is used in both generate() and check_seed(),
-// ensuring that they generate exactly the same precodes
 fn precode_and_rng<F>(seed: u64, i: usize, ni: usize, mi: usize) -> (CsMat<F>, ChaCha20Rng)
 where
     F: Field + Num,
@@ -184,12 +182,44 @@ where
     ptrs.push(0); // ptrs always starts with 0
 
     for _ in 0..n {
-        // for each row, generate d random nonzero columns (with replacement)
+        // for each row, sample d random nonzero columns (without replacement)
         let cols = {
-            let mut tmp = (&mut rng).sample_iter(&dist).take(d).collect::<Vec<_>>();
-            tmp.sort_unstable();
+            /*
+            let mut nub = HashSet::new();
+            let mut tmp = (&mut rng)
+                .sample_iter(&dist)
+                .filter(|&x| {
+                    if nub.contains(&x) {
+                        false
+                    } else {
+                        nub.insert(x);
+                        true
+                    }
+                })
+                .take(d)
+                .collect::<Vec<_>>();
+            */
+            // for small d, the quadratic approach is almost certainly faster
+            let mut tmp = Vec::with_capacity(d);
+            assert_eq!(
+                d,
+                (&mut rng)
+                    .sample_iter(&dist)
+                    .filter(|&x| {
+                        if tmp.contains(&x) {
+                            false
+                        } else {
+                            tmp.push(x);
+                            true
+                        }
+                    })
+                    .take(d)
+                    .count()
+            );
+            tmp.sort_unstable(); // need to sort to supply to new_csc below
             tmp
         };
+        assert_eq!(d, cols.len());
 
         // sample random elements for each column
         let mut last = m + 1;
