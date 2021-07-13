@@ -36,13 +36,13 @@ class SparseMatrix:
                 y[j] += x[i] * val
         return y
 
-    # Generates a matrix of size n x m, where each row has d random positions *with* replacement
+    # Generate a matrix of size n x m, where each row has d *distinct* random positions
     # filled with random non-zero elements of the field
     @staticmethod
     def generate_random(n, m, d, p):
         matrix = SparseMatrix(n, m)
         for i in range(n):
-            indices = set(random.choices(range(m), k=d))
+            indices = random.sample(range(m), d)
             for j in indices:
                 matrix.add(i, j, random.randint(1, p-1))
         return matrix
@@ -54,15 +54,14 @@ class SparseMatrix:
 p = 90589243044481683682024195529420329427646084220979961316176257384569345097147
 n = 2**13
 
-# the following parameters are taken from Table 1 of the write-up (and will be updated later)
-T = 128
-alpha = 0.32
-beta = 0.16
-gamma = 0.45
-k = 1.1
-d1 = 7
-d2 = 10
+# the following parameters are taken from Table 1 of the write-up.
+alpha = 0.178
+beta = 0.0785
+# r is the rate of the code
+r = 1.57
 
+# delta is the distance of the code, not really needed for the encoding procedure, used for testing.
+delta = beta / r
 
 # multiply two field elements
 def field_mult(a, b):
@@ -72,6 +71,12 @@ def field_mult(a, b):
 # sum up two field elements
 def field_add(a, b):
     return (a + b) % p
+
+
+# the binary entropy function
+def H(x):
+    assert 0 < x < 1
+    return -x*math.log(x,2)-(1-x)*math.log(1-x,2)
 
 
 # I don't implement an efficient encoding by Reed-Solomon, because I assume we already have it.
@@ -90,94 +95,84 @@ def reed_solomon(x, m):
     return y
 
 
-# This is the time-consuming part of the generation procedure. Most likely it will always return True, but we have to
-# have it to guarantee a low probability (2^{-128}) of generating a bad code.
-# Given an nxm matrix, we check that every row has at least two non-zero entries,
-# and that every pair of rows has at least three distinct non-zeros.
-def check(matrix):
-    for i1 in range(matrix.n):
-        if len(matrix.a[i1]) < 2:
-            return False
-        for i2 in range(i1 + 1, matrix.n):
-            indices = set()
-            for (j, val) in matrix.a[i1]+matrix.a[i2]:
-                indices.add(j)
-            if len(indices) < 3:
-                return False
-    return True
-
-
 # The code is given by two lists of sparse matrices, precodes and postcodes.
 # Let n0 = n, n1 = alpha n0, n2 = alpha n1,...., nt = alpha n_{t-1},
-# where nt is the first value <= T.
+# where nt is the first value <= 20.
 #
-# Each list of matrices will have t+1 matrices.
-# The i-th matrix in precodes has dimensions ni x (alpha * ni), where alpha is fixed above.
-# The i-th matrix in postcodes has dimensions (ni + k * alpha * ni) x (k * ni), where alpha and k are parameters fixed above.
+# Each list of matrices will have t matrices.
+# The i-th matrix in precodes has dimensions ni x (alpha * ni), where alpha is the parameter fixed above.
+# The i-th matrix in postcodes has dimensions (alpha * r * ni) x ((r - 1 - alpha * r) * n_i),
+# where alpha and r are the parameters fixed above.
 #
-# Each matrix in *postcodes* is just a random matrix sampled as follows:
-# In each row of the matrix we first sample d2 random indices with replacement, and ignore repetitions.
+# Each matrix in *precodes* is just a random sparse matrix sampled as follows:
+# In each row of the matrix we pick cn distinct random indices.
 # Then each of the sampled positions of the matrix gets a random non-zero element of the field.
 # Since all the matrices are sparse, we store them as lists of non-zero elements.
 #
-# Matrices in *precodes* are generated in the same way as postcodes (with d1 non-zeros per row instead of d2),
-# but if a precode doesn't pass check(), we resample it.
+# Matrices in *postcode* are sampled in the same way as in precodes with dn non-zeros per row instead of cn.
 def generate(n):
     precodes = []
     postcodes = []
     i = 0
     ni = n
-    while ni > T:
+    while ni > 20:
         # the current precode matrix has dimensions ni x mi
         mi = math.ceil(ni * alpha)
         # the current postcode matrix has dimensions niprime x miprime
-        niprime = ni + math.ceil(k * mi)
-        miprime = math.ceil(k * ni)
+        niprime = math.ceil(r * mi)
+        miprime = math.ceil(r * ni) - ni - niprime
 
-        precode = SparseMatrix.generate_random(ni, mi, d1, p)
-        while not check(precode):
-            precode = SparseMatrix.generate_random(ni, mi, d1, p)
-
+        # the sparsity of the precode matrix is cn
+        cn = math.ceil(min(
+            max(1.2 * beta * ni, beta * ni +3),
+            (110/ni + H(beta) + alpha * H(1.2 * beta / alpha)) / (beta * math.log(alpha / (1.2 * beta), 2))
+        ))
+        precode = SparseMatrix.generate_random(ni, mi, cn, p)
         precodes.append(precode)
 
-        postcode = SparseMatrix.generate_random(niprime, miprime, d2, p)
+        # the sparsity of the postcode matrix is dn
+        mu = r - 1 - r * alpha
+        nu = beta + alpha * beta + 0.03
+        dn = math.ceil(min(
+            ni * (2 * beta + (r - 1 + 110/ni)/math.log(p, 2) ),
+            (r * alpha * H(beta / r) + mu * H(nu / mu) + 110/ni) / (alpha * beta * math.log(mu / nu, 2))
+        ))
+        postcode = SparseMatrix.generate_random(niprime, miprime, dn, p)
         postcodes.append(postcode)
+
         i += 1
         ni = math.ceil(ni * alpha)
     return precodes, postcodes
 
 
-# The recursive part of the encoding.
-# If the length of x is less than T, then we just encode the vector by Reed-Solomon.
+# The encoding procedure.
+# If the length of x is at most 20, then we just encode the vector by Reed-Solomon.
 # Otherwise we take the next pair of matrices from precodes and postcodes
 # y = x * precode
 # z = recursive encoding of y
-# the resulting encoding is (x, z) * postcode
-def encode_recursive(x, code, shift = 0):
-    if len(x) <= T:
-        return reed_solomon(x, math.ceil(k*len(x)))
+# v = z * postcode
+# the resulting encoding is (x, z, v)
+def encode(x, code, shift = 0):
+    if len(x) <= 20:
+        return reed_solomon(x, math.ceil(r * len(x)))
     precodes, postcodes = code
     assert precodes[shift].n == len(x)
     y = precodes[shift].multiply(x)
-    z = encode_recursive(y, code, shift+1)
-    assert postcodes[shift].n == len(x) + len(z)
-    # here '+' is the list concatenation operator.
-    return postcodes[shift].multiply(x+z)
-
-
-# x is an input vector, code is a code generated by the generate function above.
-def encode(x, code):
-    non_systematic_part = encode_recursive(x, code)
-    # here '+' is the list concatenation operator. That is, our code is systematic: it output the input vector x
-    # followed by the vector encode_recursive(...)
-    return x + non_systematic_part
+    z = encode(y, code, shift+1)
+    assert postcodes[shift].n == len(z)
+    v = postcodes[shift].multiply(z)
+    # here '+' denotes the list concatenation operator.
+    return x + z + v
 
 
 # example
 code = generate(n)
-# generate a random vector x of length n without using range(p):
-x = []
-for _ in range(n):
-    x.append(random.randint(0, p-1))
 
-encoded = encode(x, code)
+for _ in range(10):
+    x = []
+    # generate a random vector x of length n without using range(p):
+    for _ in range(n):
+        x.append(random.randint(0, p-1))
+    encoded = encode(x, code)
+    hammingWeight = sum(1 for element in encoded if element != 0)
+    print(hammingWeight/len(encoded) >= delta)
