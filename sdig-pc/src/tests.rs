@@ -7,7 +7,7 @@
 // This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use super::{SdigCommit, SdigEncoding, SdigFFTCommit, SdigFFTEncoding};
+use super::{SdigCommit, SdigEncoding, SdigFFTCommit, SdigFFTEncoding, SizedField};
 
 use blake2::Blake2b;
 use ff::Field;
@@ -63,21 +63,6 @@ fn sprs_playground() {
 }
 
 #[test]
-fn test_matgen_check_seed() {
-    let mut rng = thread_rng();
-    use super::matgen::check_seed;
-
-    let n = 256usize + (rng.gen::<usize>() % 4096);
-    for seed in 0..1024u64 {
-        if check_seed::<Ft63>(n, 128, seed) {
-            println!("Seed {} was good for n={}", seed, n);
-            return;
-        }
-    }
-    panic!("did not find a good seed");
-}
-
-#[test]
 fn test_matgen_encode() {
     let mut rng = thread_rng();
     use super::encode::{encode, reed_solomon, reed_solomon_fft};
@@ -85,7 +70,7 @@ fn test_matgen_encode() {
 
     let baselen = 128;
     let n = 256usize + (rng.gen::<usize>() % 4096);
-    let (precodes, postcodes) = generate(n, baselen, 0u64);
+    let (precodes, postcodes) = generate(n, baselen, 0u64, Ft63::FLOG2 as f64);
 
     let xi_len = precodes[0].cols() + postcodes[0].rows();
     let mut xi = Vec::with_capacity(xi_len);

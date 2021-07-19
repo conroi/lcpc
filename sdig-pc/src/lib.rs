@@ -19,7 +19,7 @@ extern crate test;
 use encode::{encode, reed_solomon, reed_solomon_fft};
 use matgen::generate;
 
-use ff::Field;
+use ff::{Field, PrimeField};
 use fffft::{FFTError, FFTPrecomp, FieldFFT};
 use lcpc2d::{def_labels, FieldHash, LcCommit, LcEncoding, LcEvalProof};
 use num_traits::Num;
@@ -32,6 +32,19 @@ pub mod matgen;
 mod bench;
 #[cfg(any(test, feature = "bench"))]
 mod tests;
+
+/// Trait representing bit size information for a field
+pub trait SizedField {
+    /// Ceil of log2(cardinality)
+    const CLOG2: u32;
+    /// Floor of log2(cardinality)
+    const FLOG2: u32;
+}
+
+impl<T: PrimeField> SizedField for T {
+    const CLOG2: u32 = <T as PrimeField>::NUM_BITS;
+    const FLOG2: u32 = <T as PrimeField>::NUM_BITS - 1;
+}
 
 /// Encoding definition for SDIG expander-based polycommit
 #[derive(Clone, Debug)]
@@ -46,7 +59,7 @@ const COL_ROW_RATIO_NOFFT: usize = 1;
 const SDIG_BASELEN_NOFFT: usize = 20;
 impl<Ft> SdigEncoding<Ft>
 where
-    Ft: Field + Num,
+    Ft: Field + Num + SizedField,
 {
     /// Create a new SdigEncoding for a polynomial with `len` coefficients
     /// using a random expander code generated with seed `seed`.
@@ -55,7 +68,7 @@ where
     /// gives a valid code. This function does not check the seed!
     pub fn new(len: usize, seed: u64) -> Self {
         let n_per_row = (len as f64).sqrt().ceil() as usize * COL_ROW_RATIO_NOFFT;
-        let (precodes, postcodes) = generate(n_per_row, SDIG_BASELEN_NOFFT, seed);
+        let (precodes, postcodes) = generate(n_per_row, SDIG_BASELEN_NOFFT, seed, Ft::FLOG2 as f64);
         assert_eq!(n_per_row, precodes[0].cols());
         let n_cols = n_per_row + postcodes[0].rows();
         Self {
@@ -68,7 +81,7 @@ where
 
     /// Create a new SdigEncoding for a commitment with dimensions `n_per_row` and `n_cols`
     pub fn new_from_dims(n_per_row: usize, n_cols: usize, seed: u64) -> Self {
-        let (precodes, postcodes) = generate(n_per_row, SDIG_BASELEN_NOFFT, seed);
+        let (precodes, postcodes) = generate(n_per_row, SDIG_BASELEN_NOFFT, seed, Ft::FLOG2 as f64);
         assert_eq!(n_per_row, precodes[0].cols());
         assert_eq!(n_cols, n_per_row + postcodes[0].rows());
         Self {
@@ -134,7 +147,7 @@ const COL_ROW_RATIO_FFT: usize = 1;
 const SDIG_BASELEN_FFT: usize = 128;
 impl<Ft> SdigFFTEncoding<Ft>
 where
-    Ft: FieldFFT + Num,
+    Ft: FieldFFT + Num + SizedField,
 {
     /// Create a new SdigFFTEncoding for a polynomial with `len` coefficients
     /// using a random expander code (with FFT-based R-S basecase) generated
@@ -144,7 +157,7 @@ where
     /// gives a valid code. This function does not check the seed!
     pub fn new(len: usize, seed: u64) -> Self {
         let n_per_row = (len as f64).sqrt().ceil() as usize * COL_ROW_RATIO_FFT;
-        let (precodes, postcodes) = generate(n_per_row, SDIG_BASELEN_FFT, seed);
+        let (precodes, postcodes) = generate(n_per_row, SDIG_BASELEN_FFT, seed, Ft::FLOG2 as f64);
         let pc = <Ft as FieldFFT>::precomp_fft(SDIG_BASELEN_FFT).unwrap();
         assert_eq!(n_per_row, precodes[0].cols());
         assert_eq!(SDIG_BASELEN_FFT, 1 << pc.get_log_len());
@@ -160,7 +173,7 @@ where
 
     /// Create new SdigFFTEncoding for a commitment with dimensions `n_per_row` and `n_cols`
     pub fn new_from_dims(n_per_row: usize, n_cols: usize, seed: u64) -> Self {
-        let (precodes, postcodes) = generate(n_per_row, SDIG_BASELEN_FFT, seed);
+        let (precodes, postcodes) = generate(n_per_row, SDIG_BASELEN_FFT, seed, Ft::FLOG2 as f64);
         let pc = <Ft as FieldFFT>::precomp_fft(SDIG_BASELEN_FFT).unwrap();
         assert_eq!(SDIG_BASELEN_FFT, 1 << pc.get_log_len());
         assert_eq!(n_per_row, precodes[0].cols());
