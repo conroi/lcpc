@@ -10,97 +10,101 @@
 /*! encode a vector of length n using an expander code */
 
 use ff::Field;
-use fffft::{FFTError, FFTPrecomp, FieldFFT};
 use ndarray::{linalg::Dot, ArrayView};
 use num_traits::Num;
 use sprs::{CsMat, MulAcc};
 
+// given a set of precodes and postcodes, output length of codeword
+pub(super) fn codeword_length<F>(precodes: &[CsMat<F>], postcodes: &[CsMat<F>]) -> usize
+where
+    F: Field + Num,
+{
+    assert!(!precodes.is_empty());
+    assert_eq!(precodes.len(), postcodes.len());
+
+    // input
+    precodes[0].cols()
+    // R-S result
+        + postcodes.last().unwrap().cols()
+    // precode outputs (except input to R-S, which is not part of codeword)
+        + precodes.iter().take(precodes.len() - 1).map(|pc| pc.rows()).sum::<usize>()
+    // postcode outputs
+        + postcodes.iter().map(|pc| pc.rows()).sum::<usize>()
+}
+
 /// encode a vector given a code of corresponding length
-pub fn encode<F, T, R, E>(
-    mut xi: T,
-    baselen: usize,
-    precodes: &[CsMat<F>],
-    postcodes: &[CsMat<F>],
-    mut rs: R,
-) -> Result<(), E>
+pub fn encode<F, T>(mut xi: T, precodes: &[CsMat<F>], postcodes: &[CsMat<F>])
 where
     F: Field + Num + MulAcc,
     T: AsMut<[F]>,
-    R: FnMut(Vec<F>, usize) -> Result<Vec<F>, E>,
-    E: std::error::Error,
 {
     // check sizes
-    assert!(!precodes.is_empty());
-    assert_eq!(precodes.len(), postcodes.len());
-    assert_eq!(xi.as_mut().len(), precodes[0].cols() + postcodes[0].rows());
-
-    // intermediate values generated during the computation
-    let mut intermeds: Vec<Vec<F>> = Vec::with_capacity(precodes.len() + 1);
-    intermeds.push(Vec::from(&xi.as_mut()[..precodes[0].cols()]));
+    assert_eq!(xi.as_mut().len(), codeword_length(precodes, postcodes));
 
     // compute precodes all the way down
-    for i in 0..precodes.len() {
-        assert_eq!(precodes[i].cols(), intermeds[i].len());
-        let res = precodes[i]
-            .dot(&ArrayView::from(&intermeds[i][..]))
-            .into_raw_vec();
-        if i < precodes.len() - 1 {
-            // recursive case: applying precode[i]
-            intermeds.push(res);
-        } else {
-            // base case: reed-solomon
-            assert!(res.len() < baselen);
-            let mut res = rs(res, baselen)?;
-            assert_eq!(res.len(), baselen);
-            intermeds[i].append(&mut res);
-        }
-    }
-    assert_eq!(intermeds.len(), postcodes.len());
+    let mut in_start = 0usize;
+    for precode in precodes.iter().take(precodes.len() - 1) {
+        // compute matrix-vector product
+        let in_end = in_start + precode.cols();
+        let (in_arr, out_arr) = xi.as_mut().split_at_mut(in_end);
+        out_arr[..precode.rows()].copy_from_slice(
+            precode
+                .dot(&ArrayView::from(&in_arr[in_start..]))
+                .as_slice()
+                .unwrap(),
+        );
 
-    for i in (0..postcodes.len()).rev() {
-        assert_eq!(postcodes[i].cols(), intermeds[i].len());
-        let mut res = postcodes[i]
-            .dot(&ArrayView::from(&intermeds[i][..]))
-            .into_raw_vec();
-        if i > 0 {
-            intermeds[i - 1].append(&mut res);
-        } else {
-            let outp = &mut xi.as_mut()[precodes[0].cols()..];
-            outp.copy_from_slice(&res[..]);
-        }
+        in_start = in_end;
     }
 
-    Ok(())
+    // base-case code: Reed-Solomon
+    let (mut in_start, mut out_start) = {
+        // first, evaluate last precode into temporary storage
+        let precode = precodes.last().unwrap();
+        let in_end = in_start + precode.cols();
+        let in_arr = precode
+            .dot(&ArrayView::from(&xi.as_mut()[in_start..in_end]))
+            .into_raw_vec();
+
+        // now evaluate Reed-Solomon code on the result
+        let out_end = in_end + postcodes.last().unwrap().cols();
+        reed_solomon(in_arr.as_ref(), &mut xi.as_mut()[in_end..out_end]);
+
+        (in_end + precode.rows(), out_end)
+    };
+
+    for (precode, postcode) in precodes.iter().rev().zip(postcodes.iter().rev()) {
+        // move input pointer backward
+        in_start -= precode.rows();
+
+        // compute matrix-vector product
+        let (in_arr, out_arr) = xi.as_mut().split_at_mut(out_start);
+        out_arr[..postcode.rows()].copy_from_slice(
+            postcode
+                .dot(&ArrayView::from(&in_arr[in_start..]))
+                .as_slice()
+                .unwrap(),
+        );
+
+        out_start += postcode.rows();
+    }
+
+    assert_eq!(in_start, precodes[0].cols());
+    assert_eq!(out_start, xi.as_mut().len());
 }
 
-/// Compute Reed-Solomon encoding using Vandermonde matrix
-pub fn reed_solomon<F>(xi: Vec<F>, len: usize) -> Result<Vec<F>, std::io::Error>
+// Compute Reed-Solomon encoding using Vandermonde matrix
+fn reed_solomon<F>(xi: &[F], xo: &mut [F])
 where
     F: Field,
 {
-    let mut res = vec![<F as Field>::zero(); len];
     let mut x = <F as Field>::one();
-    for r in res.iter_mut() {
+    for r in xo.as_mut().iter_mut() {
+        *r = <F as Field>::zero();
         for j in (0..xi.len()).rev() {
             *r *= x;
             *r += xi[j];
         }
         x += <F as Field>::one();
     }
-    Ok(res)
-}
-
-/// Compute Reed-Solomon encoding using FFT
-pub fn reed_solomon_fft<F>(
-    mut xi: Vec<F>,
-    len: usize,
-    pc: &FFTPrecomp<F>,
-) -> Result<Vec<F>, FFTError>
-where
-    F: FieldFFT,
-{
-    assert!(xi.len() < len);
-    xi.resize(len, <F as Field>::zero());
-    <F as FieldFFT>::fft_io_pc(&mut xi, pc)?;
-    Ok(xi)
 }
