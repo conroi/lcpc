@@ -41,7 +41,7 @@ const R_ALPHA_H_BOR_P_MU_H_NUOMU: f64 = 0.365393858883888;
 // alpha * beta * math.log(mu / nu, 2)
 const ALPHA_BETA_LOG_MON: f64 = 0.0174141735715980;
 
-const fn ceil_mul(n: usize, num: usize, den: usize) -> usize {
+const fn ceil_muldiv(n: usize, num: usize, den: usize) -> usize {
     (n * num + den - 1) / den
 }
 
@@ -88,11 +88,11 @@ fn get_dims(
 
     // figure out dimensions for the precode and postcode matrices
     let pre_dims = {
-        let mut tmp: Vec<_> = iterate(n, |&ni| ceil_mul(ni, ALPHA_NUM, ALPHA_DEN))
+        let mut tmp: Vec<_> = iterate(n, |&ni| ceil_muldiv(ni, ALPHA_NUM, ALPHA_DEN))
             .take_while(|&ni| ni > baselen)
             .collect();
         if let Some(&ni) = tmp.last() {
-            let last = ceil_mul(ni, ALPHA_NUM, ALPHA_DEN);
+            let last = ceil_muldiv(ni, ALPHA_NUM, ALPHA_DEN);
             assert!(last <= baselen);
             tmp.push(last);
         }
@@ -104,8 +104,8 @@ fn get_dims(
                 let mi = nm[1];
                 let cn = min(
                     max(
-                        ceil_mul(ni, 6 * BETA_NUM, 5 * BETA_DEN),
-                        3 + ceil_mul(ni, BETA_NUM, BETA_DEN),
+                        ceil_muldiv(ni, 6 * BETA_NUM, 5 * BETA_DEN),
+                        3 + ceil_muldiv(ni, BETA_NUM, BETA_DEN),
                     ),
                     ((110f64 / (ni as f64) + H_BETA_P_ALPHA_H_1P2BOA) / BETA_LOG_AO1P2B).ceil()
                         as usize,
@@ -118,10 +118,10 @@ fn get_dims(
     let post_dims = pre_dims
         .iter()
         .map(|&(ni, mi, _)| {
-            let niprime = ceil_mul(mi, R_NUM, R_DEN);
-            let miprime = ceil_mul(ni, R_NUM, R_DEN) - ni - niprime;
-            let tmp1 = ceil_mul(ni, 2 * BETA_NUM, BETA_DEN); // 2 * beta * ni
-            let tmp2 = ceil_mul(ni, R_NUM, R_DEN) - ni + 110; // ni * (r - 1 + 110/ni)
+            let niprime = ceil_muldiv(mi, R_NUM, R_DEN);
+            let miprime = ceil_muldiv(ni, R_NUM, R_DEN) - ni - niprime;
+            let tmp1 = ceil_muldiv(ni, 2 * BETA_NUM, BETA_DEN); // 2 * beta * ni
+            let tmp2 = ceil_muldiv(ni, R_NUM, R_DEN) - ni + 110; // ni * (r - 1 + 110/ni)
             let dn = min(
                 tmp1 + (tmp2 as f64 / log2p).ceil() as usize,
                 ((110f64 / (ni as f64) + R_ALPHA_H_BOR_P_MU_H_NUOMU) / ALPHA_BETA_LOG_MON).ceil()
