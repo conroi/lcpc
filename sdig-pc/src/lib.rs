@@ -136,7 +136,7 @@ where
     type F = Ft;
     type Err = std::io::Error;
 
-    def_labels!(sdig_nofft_pc);
+    def_labels!(sdig_pc);
 
     fn encode<T: AsMut<[Ft]>>(&self, inp: T) -> Result<(), Self::Err> {
         encode(inp, &self.precodes, &self.postcodes);
