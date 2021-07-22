@@ -17,10 +17,12 @@ sdig-pc is a polynomial commitment scheme from the SDIG expander code
 extern crate test;
 
 use encode::{codeword_length, encode};
-use matgen::generate;
+use matgen::{generate, DIST_DEN, DIST_NUM};
 
-use ff::{Field, PrimeField};
-use lcpc2d::{def_labels, FieldHash, LcCommit, LcEncoding, LcEvalProof};
+use ff::Field;
+use lcpc2d::{
+    def_labels, n_degree_tests, FieldHash, LcCommit, LcEncoding, LcEvalProof, SizedField,
+};
 use num_traits::Num;
 use sprs::{CsMat, MulAcc};
 
@@ -32,19 +34,6 @@ mod bench;
 #[cfg(any(test, feature = "bench"))]
 mod tests;
 
-/// Trait representing bit size information for a field
-pub trait SizedField {
-    /// Ceil of log2(cardinality)
-    const CLOG2: u32;
-    /// Floor of log2(cardinality)
-    const FLOG2: u32;
-}
-
-impl<T: PrimeField> SizedField for T {
-    const CLOG2: u32 = <T as PrimeField>::NUM_BITS;
-    const FLOG2: u32 = <T as PrimeField>::NUM_BITS - 1;
-}
-
 /// Encoding definition for SDIG expander-based polycommit
 #[derive(Clone, Debug)]
 pub struct SdigEncoding<Ft> {
@@ -54,20 +43,44 @@ pub struct SdigEncoding<Ft> {
     postcodes: Vec<CsMat<Ft>>,
 }
 
-const COL_ROW_RATIO: usize = 1;
-const SDIG_BASELEN: usize = 20;
 impl<Ft> SdigEncoding<Ft>
 where
     Ft: Field + Num + SizedField,
 {
-    /// Create a new SdigEncoding for a polynomial with `len` coefficients
-    /// using a random expander code generated with seed `seed`.
-    ///
-    /// Note: you should use matgen::check_seed to make sure that `seed`
-    /// gives a valid code. This function does not check the seed!
-    pub fn new(len: usize, seed: u64) -> Self {
-        let n_per_row = (len as f64).sqrt().ceil() as usize * COL_ROW_RATIO;
-        let (precodes, postcodes) = generate(n_per_row, SDIG_BASELEN, seed, Ft::FLOG2 as f64);
+    const BASELEN: usize = 20;
+    const LAMBDA: usize = 128;
+
+    // number of column openings required for soundness
+    fn _n_col_opens() -> usize {
+        let dist_ov_3 = DIST_NUM as f64 / (3 * DIST_DEN) as f64;
+        let den = (1f64 - dist_ov_3).log2();
+        (-(Self::LAMBDA as f64) / den).ceil() as usize
+    }
+
+    // number of degree tests required for soundness
+    fn _n_degree_tests(n_cols: usize) -> usize {
+        n_degree_tests(Self::LAMBDA, n_cols, Ft::FLOG2 as usize)
+    }
+
+    // shared between new and new_ml
+    fn _new_from_np1(len: usize, np1: usize, seed: u64) -> Self {
+        let n_col_opens = Self::_n_col_opens();
+        let nr1 = (len + np1 - 1) / np1;
+        let nd1 = Self::_n_degree_tests(np1 * 2); // approximately
+        assert!(np1 * nr1 >= len);
+        assert!(np1 * (nr1 - 1) < len);
+
+        let np2 = np1 / 2;
+        let nr2 = (len + np2 - 1) / np2;
+        let nd2 = Self::_n_degree_tests(np2 * 2); // approximately
+        assert!(np2 * nr2 >= len);
+        assert!(np2 * (nr2 - 1) < len);
+
+        let sz1 = n_col_opens * nr1 + (1 + nd1) * np1;
+        let sz2 = n_col_opens * nr2 + (1 + nd2) * np2;
+        let n_per_row = if sz1 < sz2 { np1 } else { np2 };
+
+        let (precodes, postcodes) = generate(n_per_row, Self::BASELEN, seed, Ft::FLOG2 as f64);
         assert_eq!(n_per_row, precodes[0].cols());
         let n_cols = codeword_length(&precodes, &postcodes);
         Self {
@@ -78,9 +91,33 @@ where
         }
     }
 
+    /// Create a new SdigEncoding for a univariate polynomial with `len` coefficients
+    /// using a random expander code generated with seed `seed`.
+    pub fn new(len: usize, seed: u64) -> Self {
+        // compute #cols, optimizing the communication cost
+        let lncf = (Self::_n_col_opens() * len) as f64;
+        // approximation of num_degree_tests
+        let ndt = Self::_n_degree_tests(lncf.sqrt().ceil() as usize * 2) as f64;
+        let np1 = (lncf / ndt).sqrt().ceil() as usize;
+        Self::_new_from_np1(len, np1, seed)
+    }
+
+    /// Create a new SdigEncoding for a multilinear polynomial with `n_vars` variables
+    /// (i.e., 2^`n_vars` monomials) using a random expander code generated with seed `seed`.
+    pub fn new_ml(n_vars: usize, seed: u64) -> Self {
+        let n_monomials = 1 << n_vars;
+        let lncf = (Self::_n_col_opens() * n_monomials) as f64;
+        // approximation of num_degree_tests
+        let ndt = Self::_n_degree_tests(lncf.sqrt().ceil() as usize * 2) as f64;
+        let np1 = ((lncf / ndt).sqrt().ceil() as usize)
+            .checked_next_power_of_two()
+            .unwrap();
+        Self::_new_from_np1(n_monomials, np1, seed)
+    }
+
     /// Create a new SdigEncoding for a commitment with dimensions `n_per_row` and `n_cols`
     pub fn new_from_dims(n_per_row: usize, n_cols: usize, seed: u64) -> Self {
-        let (precodes, postcodes) = generate(n_per_row, SDIG_BASELEN, seed, Ft::FLOG2 as f64);
+        let (precodes, postcodes) = generate(n_per_row, Self::BASELEN, seed, Ft::FLOG2 as f64);
         assert_eq!(n_per_row, precodes[0].cols());
         assert_eq!(n_cols, codeword_length(&precodes, &postcodes));
         Self {
@@ -94,7 +131,7 @@ where
 
 impl<Ft> LcEncoding for SdigEncoding<Ft>
 where
-    Ft: Field + FieldHash + MulAcc + Num,
+    Ft: Field + FieldHash + MulAcc + Num + SizedField,
 {
     type F = Ft;
     type Err = std::io::Error;
@@ -118,6 +155,14 @@ where
         let nc1 = n_cols == self.n_cols;
         let nc2 = n_cols == codeword_length(&self.precodes, &self.postcodes);
         ok && np1 && np2 && nc1 && nc2
+    }
+
+    fn get_n_col_opens(&self) -> usize {
+        Self::_n_col_opens()
+    }
+
+    fn get_n_degree_tests(&self) -> usize {
+        Self::_n_degree_tests(self.n_cols)
     }
 }
 

@@ -57,6 +57,19 @@ impl<T: PrimeField> FieldHash for T {
     }
 }
 
+/// Trait representing bit size information for a field
+pub trait SizedField {
+    /// Ceil of log2(cardinality)
+    const CLOG2: u32;
+    /// Floor of log2(cardinality)
+    const FLOG2: u32;
+}
+
+impl<T: PrimeField> SizedField for T {
+    const CLOG2: u32 = <T as PrimeField>::NUM_BITS;
+    const FLOG2: u32 = <T as PrimeField>::NUM_BITS - 1;
+}
+
 /// Trait for a linear encoding used by the polycommit
 pub trait LcEncoding: Clone + std::fmt::Debug + Sync {
     /// Field over which coefficients are defined
@@ -77,11 +90,17 @@ pub trait LcEncoding: Clone + std::fmt::Debug + Sync {
     /// Encoding function
     fn encode<T: AsMut<[Self::F]>>(&self, inp: T) -> Result<(), Self::Err>;
 
-    /// Compute optimal dimensions for this encoding on an input of size `len`
+    /// Get dimensions for this encoding instance on an input vector of length `len`
     fn get_dims(&self, len: usize) -> (usize, usize, usize);
 
     /// Check that supplied dimensions are compatible with this encoding
     fn dims_ok(&self, n_per_row: usize, n_cols: usize) -> bool;
+
+    /// Get the number of column openings required for this encoding
+    fn get_n_col_opens(&self) -> usize;
+
+    /// Get the number of degree tests required for this encoding
+    fn get_n_degree_tests(&self) -> usize;
 }
 
 // local accessors for enclosed types
@@ -202,11 +221,9 @@ where
         &self,
         outer_tensor: &[FldT<E>],
         enc: &E,
-        n_degree_tests: usize,
-        n_col_opens: usize,
         tr: &mut Transcript,
     ) -> ProverResult<LcEvalProof<D, E>, ErrT<E>> {
-        prove(self, outer_tensor, enc, n_degree_tests, n_col_opens, tr)
+        prove(self, outer_tensor, enc, tr)
     }
 }
 
@@ -414,27 +431,15 @@ where
     }
 
     /// Verify an evaluation proof and return the resulting evaluation
-    #[allow(clippy::too_many_arguments)]
     pub fn verify(
         &self,
         root: &Output<D>,
         outer_tensor: &[FldT<E>],
         inner_tensor: &[FldT<E>],
         enc: &E,
-        n_degree_tests: usize,
-        n_col_opens: usize,
         tr: &mut Transcript,
     ) -> VerifierResult<FldT<E>, ErrT<E>> {
-        verify(
-            root,
-            outer_tensor,
-            inner_tensor,
-            self,
-            enc,
-            n_degree_tests,
-            n_col_opens,
-            tr,
-        )
+        verify(root, outer_tensor, inner_tensor, self, enc, tr)
     }
 }
 
@@ -517,6 +522,13 @@ where
     {
         Ok(WrappedLcEvalProof::<FldT<E>>::deserialize(deserializer)?.unwrap())
     }
+}
+
+/// Compute number of degree tests required for `lambda`-bit security
+/// for a code with `len`-length codewords over `flog2`-bit field
+pub fn n_degree_tests(lambda: usize, len: usize, flog2: usize) -> usize {
+    let den = flog2 - log2(len);
+    (lambda + den - 1) / den
 }
 
 // parallelization limit when working on columns
@@ -728,20 +740,17 @@ where
     Ok(LcColumn { col, path })
 }
 
-fn log2(v: usize) -> usize {
+const fn log2(v: usize) -> usize {
     (63 - (v.next_power_of_two() as u64).leading_zeros()) as usize
 }
 
 /// Verify the evaluation of a committed polynomial and return the result
-#[allow(clippy::too_many_arguments)]
 fn verify<D, E>(
     root: &Output<D>,
     outer_tensor: &[FldT<E>],
     inner_tensor: &[FldT<E>],
     proof: &LcEvalProof<D, E>,
     enc: &E,
-    n_degree_tests: usize,
-    n_col_opens: usize,
     tr: &mut Transcript,
 ) -> VerifierResult<FldT<E>, ErrT<E>>
 where
@@ -749,6 +758,7 @@ where
     E: LcEncoding,
 {
     // make sure arguments are well formed
+    let n_col_opens = enc.get_n_col_opens();
     if n_col_opens != proof.columns.len() || n_col_opens == 0 {
         return Err(VerifierError::NumColOpens);
     }
@@ -770,6 +780,7 @@ where
     // we run multiple instances of this to boost soundness
     let mut rand_tensor_vec: Vec<Vec<FldT<E>>> = Vec::new();
     let mut p_random_fft: Vec<Vec<FldT<E>>> = Vec::new();
+    let n_degree_tests = enc.get_n_degree_tests();
     for i in 0..n_degree_tests {
         let rand_tensor: Vec<FldT<E>> = {
             let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
@@ -910,8 +921,6 @@ fn prove<D, E>(
     comm: &LcCommit<D, E>,
     outer_tensor: &[FldT<E>],
     enc: &E,
-    n_degree_tests: usize,
-    n_col_opens: usize,
     tr: &mut Transcript,
 ) -> ProverResult<LcEvalProof<D, E>, ErrT<E>>
 where
@@ -927,6 +936,7 @@ where
     // first, evaluate the polynomial on a random tensor (low-degree test)
     // we repeat this to boost soundness
     let mut p_random_vec: Vec<Vec<FldT<E>>> = Vec::new();
+    let n_degree_tests = enc.get_n_degree_tests();
     for _i in 0..n_degree_tests {
         let p_random = {
             let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
@@ -974,6 +984,7 @@ where
         .for_each(|coeff| coeff.transcript_update(tr, E::LABEL_PE));
 
     // now extract the column numbers to open
+    let n_col_opens = enc.get_n_col_opens();
     let columns: Vec<LcColumn<D, E>> = {
         let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
         tr.challenge_bytes(E::LABEL_CO, &mut key);

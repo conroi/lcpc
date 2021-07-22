@@ -26,6 +26,9 @@ const BETA_DEN: usize = 2000;
 // r = 1.57
 const R_NUM: usize = 157;
 const R_DEN: usize = 100;
+// distance: beta / r
+pub(super) const DIST_NUM: usize = BETA_NUM * R_DEN;
+pub(super) const DIST_DEN: usize = BETA_DEN * R_NUM;
 
 // constants for computing cn (H is bin entropy fn)
 // H(beta) + alpha * H(1.2 * beta / alpha)
@@ -110,6 +113,7 @@ fn get_dims(
                     ((110f64 / (ni as f64) + H_BETA_P_ALPHA_H_1P2BOA) / BETA_LOG_AO1P2B).ceil()
                         as usize,
                 );
+                let cn = min(cn, mi); // can't generate more nonzero entries than there are columns
                 (ni, mi, cn)
             })
             .collect::<Vec<_>>()
@@ -127,6 +131,7 @@ fn get_dims(
                 ((110f64 / (ni as f64) + R_ALPHA_H_BOR_P_MU_H_NUOMU) / ALPHA_BETA_LOG_MON).ceil()
                     as usize,
             );
+            let dn = min(dn, miprime); // can't generate more nonzero entries than there are columns
             (niprime, miprime, dn)
         })
         .collect::<Vec<_>>();

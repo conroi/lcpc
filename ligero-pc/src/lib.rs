@@ -17,7 +17,9 @@ ligero-pc is a polynomial commitment based on R-S codes, from Ligero
 extern crate test;
 
 use fffft::{FFTError, FFTPrecomp, FieldFFT};
-use lcpc2d::{def_labels, FieldHash, LcCommit, LcEncoding, LcEvalProof};
+use lcpc2d::{
+    def_labels, n_degree_tests, FieldHash, LcCommit, LcEncoding, LcEvalProof, SizedField,
+};
 
 #[cfg(all(test, feature = "bench"))]
 mod bench;
@@ -34,15 +36,28 @@ pub struct LigeroEncoding<Ft> {
 
 impl<Ft> LigeroEncoding<Ft>
 where
-    Ft: FieldFFT,
+    Ft: FieldFFT + SizedField,
 {
-    fn _get_dims(len: usize, rho: f64) -> Option<(usize, usize, usize)> {
-        if rho <= 0f64 || rho >= 1f64 {
-            return None;
-        }
+    const RHO_INV: usize = 4; // rate of the R-S code
+    const LAMBDA: usize = 128; // security parameter in bits
 
+    // number of column openings required for soundness
+    fn _n_col_opens() -> usize {
+        let den = ((1f64 + 1f64 / Self::RHO_INV as f64) / 2f64).log2();
+        (-(Self::LAMBDA as f64) / den).ceil() as usize
+    }
+
+    fn _n_degree_tests(n_cols: usize) -> usize {
+        n_degree_tests(Self::LAMBDA, n_cols, Ft::FLOG2 as usize)
+    }
+
+    fn _get_dims(len: usize) -> Option<(usize, usize, usize)> {
         // compute #cols, which must be a power of 2 because of FFT
-        let nc = (((len as f64).sqrt() / rho).ceil() as usize)
+        let n_col_opens = Self::_n_col_opens();
+        let lncf = (n_col_opens * len) as f64;
+        // approximation of num_degree_tests
+        let ndt = Self::_n_degree_tests(lncf.sqrt().ceil() as usize * Self::RHO_INV) as f64;
+        let nc1 = ((lncf / ndt).sqrt().ceil() as usize * Self::RHO_INV)
             .checked_next_power_of_two()
             .and_then(|nc| {
                 if nc > (1 << <Ft as FieldFFT>::S) {
@@ -52,11 +67,30 @@ where
                 }
             })?;
 
-        // minimize nr subject to #cols and rho
-        let np = ((nc as f64) * rho).floor() as usize;
-        let nr = (len + np - 1) / np;
-        assert!(np * nr >= len);
-        assert!(np * (nr - 1) < len);
+        // minimize nr subject to #cols and RHO
+        let np1 = nc1 / Self::RHO_INV as usize;
+        let nr1 = (len + np1 - 1) / np1;
+        let nd1 = Self::_n_degree_tests(nc1);
+        assert!(np1.is_power_of_two());
+        assert!(np1 * nr1 >= len);
+        assert!(np1 * (nr1 - 1) < len);
+
+        let nc2 = nc1 / 2;
+        let np2 = np1 / 2;
+        let nr2 = (len + np2 - 1) / np2;
+        let nd2 = Self::_n_degree_tests(nc2);
+        assert!(np2.is_power_of_two());
+        assert!(nc2.is_power_of_two());
+        assert!(np2 * nr2 >= len);
+        assert!(np2 * (nr2 - 1) < len);
+
+        let sz1 = n_col_opens * nr1 + (1 + nd1) * np1;
+        let sz2 = n_col_opens * nr2 + (1 + nd2) * np2;
+        let (nr, np, nc) = if sz1 < sz2 {
+            (nr1, np1, nc1)
+        } else {
+            (nr2, np2, nc2)
+        };
 
         Some((nr, np, nc))
     }
@@ -67,17 +101,21 @@ where
         sz && pow
     }
 
-    /// Create a new LigeroEncoding for a polynomial with `len` coefficients
-    /// using R-S code with rate `rho`
-    pub fn new(len: usize, rho: f64) -> Self {
-        let (_, n_per_row, n_cols) = Self::_get_dims(len, rho).unwrap();
-        assert!(Self::_dims_ok(n_per_row, n_cols));
-        let pc = <Ft as FieldFFT>::precomp_fft(n_cols).unwrap();
-        Self {
-            n_per_row,
-            n_cols,
-            pc,
-        }
+    /// Create a new LigeroEncoding for a univariate polynomial with `len` coefficients
+    pub fn new(len: usize) -> Self {
+        let (_, n_per_row, n_cols) = Self::_get_dims(len).unwrap();
+        Self::new_from_dims(n_per_row, n_cols)
+    }
+
+    /// Create a new LigeroEncoding for a multilinear polynomial with `n_vars` variables
+    /// (i.e., 2^`n_vars` monomials).
+    pub fn new_ml(n_vars: usize) -> Self {
+        let n_monomials = 1 << n_vars;
+        let (n_rows, n_per_row, n_cols) = Self::_get_dims(n_monomials).unwrap();
+        assert!(n_rows.is_power_of_two());
+        assert!(n_per_row.is_power_of_two());
+        assert_eq!(n_rows * n_per_row, n_monomials);
+        Self::new_from_dims(n_per_row, n_cols)
     }
 
     /// Create a new LigeroEncoding for a commitment with dimensions `n_per_row` and `n_cols`
@@ -95,7 +133,7 @@ where
 
 impl<Ft> LcEncoding for LigeroEncoding<Ft>
 where
-    Ft: FieldFFT + FieldHash,
+    Ft: FieldFFT + FieldHash + SizedField,
 {
     type F = Ft;
     type Err = FFTError;
@@ -117,6 +155,14 @@ where
         let np = n_per_row == self.n_per_row;
         let nc = n_cols == self.n_cols;
         ok && pc && np && nc
+    }
+
+    fn get_n_col_opens(&self) -> usize {
+        Self::_n_col_opens()
+    }
+
+    fn get_n_degree_tests(&self) -> usize {
+        Self::_n_degree_tests(self.n_cols)
     }
 }
 

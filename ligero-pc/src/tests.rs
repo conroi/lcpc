@@ -12,6 +12,7 @@ use super::{LigeroCommit, LigeroEncoding};
 use blake2::Blake2b;
 use ff::Field;
 use itertools::iterate;
+use lcpc2d::LcEncoding;
 use merlin::Transcript;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -27,11 +28,10 @@ fn get_dims() {
         for _ in 0..128 {
             let len_base = 1 << (lgl - 1);
             let len = len_base + (rng.gen::<usize>() % len_base);
-            let rho = rng.gen_range(0.001f64..1f64);
-            let (n_rows, n_per_row, n_cols) = LigeroEncoding::<Ft63>::_get_dims(len, rho).unwrap();
+            let (n_rows, n_per_row, n_cols) = LigeroEncoding::<Ft63>::_get_dims(len).unwrap();
             assert!(n_rows * n_per_row >= len);
             assert!((n_rows - 1) * n_per_row < len);
-            assert!(n_per_row as f64 / rho <= n_cols as f64);
+            assert!(n_per_row * LigeroEncoding::<Ft63>::RHO_INV <= n_cols);
             assert!(LigeroEncoding::<Ft63>::_dims_ok(n_per_row, n_cols));
         }
     }
@@ -40,10 +40,8 @@ fn get_dims() {
 #[test]
 fn end_to_end() {
     // commit to a random polynomial at a random rate
-    let (coeffs, rho) = random_coeffs_rho();
-    let n_degree_tests = 2;
-    let n_col_opens = 128usize;
-    let enc = LigeroEncoding::new(coeffs.len(), rho);
+    let coeffs = random_coeffs();
+    let enc = LigeroEncoding::new(coeffs.len());
     let comm = LigeroCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root();
@@ -68,31 +66,19 @@ fn end_to_end() {
     // compute an evaluation proof
     let mut tr1 = Transcript::new(b"test transcript");
     tr1.append_message(b"polycommit", root.as_ref());
-    tr1.append_message(b"rate", &rho.to_be_bytes()[..]);
-    tr1.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
-    let pf = comm
-        .prove(
-            &outer_tensor[..],
-            &enc,
-            n_degree_tests,
-            n_col_opens,
-            &mut tr1,
-        )
-        .unwrap();
+    tr1.append_message(b"ncols", &(enc.get_n_col_opens() as u64).to_be_bytes()[..]);
+    let pf = comm.prove(&outer_tensor[..], &enc, &mut tr1).unwrap();
 
     // verify it and finish evaluation
     let mut tr2 = Transcript::new(b"test transcript");
     tr2.append_message(b"polycommit", root.as_ref());
-    tr2.append_message(b"rate", &rho.to_be_bytes()[..]);
-    tr2.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
+    tr2.append_message(b"ncols", &(enc.get_n_col_opens() as u64).to_be_bytes()[..]);
     let enc2 = LigeroEncoding::new_from_dims(pf.get_n_per_row(), pf.get_n_cols());
     pf.verify(
         root.as_ref(),
         &outer_tensor[..],
         &inner_tensor[..],
         &enc2,
-        n_degree_tests,
-        n_col_opens,
         &mut tr2,
     )
     .unwrap();
@@ -101,10 +87,8 @@ fn end_to_end() {
 #[test]
 fn end_to_end_two_proofs() {
     // commit to a random polynomial at a random rate
-    let (coeffs, rho) = random_coeffs_rho();
-    let n_degree_tests = 1;
-    let n_col_opens = 128usize;
-    let enc = LigeroEncoding::new(coeffs.len(), rho);
+    let coeffs = random_coeffs();
+    let enc = LigeroEncoding::new(coeffs.len());
     let comm = LigeroCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root();
@@ -129,17 +113,8 @@ fn end_to_end_two_proofs() {
     // compute an evaluation proof
     let mut tr1 = Transcript::new(b"test transcript");
     tr1.append_message(b"polycommit", root.as_ref());
-    tr1.append_message(b"rate", &rho.to_be_bytes()[..]);
-    tr1.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
-    let pf = comm
-        .prove(
-            &outer_tensor[..],
-            &enc,
-            n_degree_tests,
-            n_col_opens,
-            &mut tr1,
-        )
-        .unwrap();
+    tr1.append_message(b"ncols", &(enc.get_n_col_opens() as u64).to_be_bytes()[..]);
+    let pf = comm.prove(&outer_tensor[..], &enc, &mut tr1).unwrap();
 
     let challenge_after_first_proof_prover = {
         let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
@@ -150,23 +125,13 @@ fn end_to_end_two_proofs() {
 
     // produce a second proof with the same transcript
     tr1.append_message(b"polycommit", root.as_ref());
-    tr1.append_message(b"rate", &rho.to_be_bytes()[..]);
-    tr1.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
-    let pf2 = comm
-        .prove(
-            &outer_tensor[..],
-            &enc,
-            n_degree_tests,
-            n_col_opens,
-            &mut tr1,
-        )
-        .unwrap();
+    tr1.append_message(b"ncols", &(enc.get_n_col_opens() as u64).to_be_bytes()[..]);
+    let pf2 = comm.prove(&outer_tensor[..], &enc, &mut tr1).unwrap();
 
     // verify it and finish evaluation
     let mut tr2 = Transcript::new(b"test transcript");
     tr2.append_message(b"polycommit", root.as_ref());
-    tr2.append_message(b"rate", &rho.to_be_bytes()[..]);
-    tr2.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
+    tr2.append_message(b"ncols", &(enc.get_n_col_opens() as u64).to_be_bytes()[..]);
     let enc2 = LigeroEncoding::new_from_dims(pf.get_n_per_row(), pf.get_n_cols());
     let res = pf
         .verify(
@@ -174,8 +139,6 @@ fn end_to_end_two_proofs() {
             &outer_tensor[..],
             &inner_tensor[..],
             &enc2,
-            n_degree_tests,
-            n_col_opens,
             &mut tr2,
         )
         .unwrap();
@@ -193,8 +156,7 @@ fn end_to_end_two_proofs() {
 
     // second proof verification with the same transcript
     tr2.append_message(b"polycommit", root.as_ref());
-    tr2.append_message(b"rate", &rho.to_be_bytes()[..]);
-    tr2.append_message(b"ncols", &(n_col_opens as u64).to_be_bytes()[..]);
+    tr2.append_message(b"ncols", &(enc.get_n_col_opens() as u64).to_be_bytes()[..]);
     let enc3 = LigeroEncoding::new_from_dims(pf2.get_n_per_row(), pf2.get_n_cols());
     let res2 = pf2
         .verify(
@@ -202,8 +164,6 @@ fn end_to_end_two_proofs() {
             &outer_tensor[..],
             &inner_tensor[..],
             &enc3,
-            n_degree_tests,
-            n_col_opens,
             &mut tr2,
         )
         .unwrap();
@@ -211,15 +171,12 @@ fn end_to_end_two_proofs() {
     assert_eq!(res, res2);
 }
 
-fn random_coeffs_rho() -> (Vec<Ft63>, f64) {
+fn random_coeffs() -> Vec<Ft63> {
     let mut rng = rand::thread_rng();
 
     let lgl = 8 + rng.gen::<usize>() % 8;
     let len_base = 1 << (lgl - 1);
     let len = len_base + (rng.gen::<usize>() % len_base);
 
-    (
-        repeat_with(|| Ft63::random(&mut rng)).take(len).collect(),
-        rng.gen_range(0.1f64..0.9f64),
-    )
+    repeat_with(|| Ft63::random(&mut rng)).take(len).collect()
 }

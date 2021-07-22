@@ -12,16 +12,13 @@ use super::{SdigCommit, SdigEncoding};
 use blake2::{Blake2b, Digest};
 use ff::{Field, PrimeField};
 use itertools::iterate;
-use lcpc2d::FieldHash;
+use lcpc2d::{FieldHash, LcEncoding};
 use merlin::Transcript;
 use num_traits::Num;
 use sprs::MulAcc;
 use std::iter::repeat_with;
 use test::{black_box, Bencher};
 use test_fields::{def_bench, ft127::*, ft255::*};
-
-const N_DEGREE_TESTS: usize = 2;
-const N_COL_OPENS: usize = 128;
 
 fn random_coeffs<Ft: Field>(log_len: usize) -> Vec<Ft> {
     let mut rng = rand::thread_rng();
@@ -68,18 +65,12 @@ where
         let mut tr = Transcript::new(b"bench transcript");
         tr.append_message(b"polycommit", comm.get_root().as_ref());
         tr.append_message(b"rate", &0.25f64.to_be_bytes()[..]);
-        tr.append_message(b"ncols", &(N_COL_OPENS as u64).to_be_bytes()[..]);
-        tr.append_message(b"ndegs", &(N_DEGREE_TESTS as u64).to_be_bytes()[..]);
-        black_box(
-            comm.prove(
-                &outer_tensor[..],
-                &enc,
-                N_DEGREE_TESTS,
-                N_COL_OPENS,
-                &mut tr,
-            )
-            .unwrap(),
+        tr.append_message(b"ncols", &(enc.get_n_col_opens() as u64).to_be_bytes()[..]);
+        tr.append_message(
+            b"ndegs",
+            &(enc.get_n_degree_tests() as u64).to_be_bytes()[..],
         );
+        black_box(comm.prove(&outer_tensor[..], &enc, &mut tr).unwrap());
     });
 }
 
@@ -107,33 +98,29 @@ where
     let mut tr = Transcript::new(b"bench transcript");
     tr.append_message(b"polycommit", comm.get_root().as_ref());
     tr.append_message(b"rate", &0.25f64.to_be_bytes()[..]);
-    tr.append_message(b"ncols", &(N_COL_OPENS as u64).to_be_bytes()[..]);
-    tr.append_message(b"ndegs", &(N_DEGREE_TESTS as u64).to_be_bytes()[..]);
-    let pf = comm
-        .prove(
-            &outer_tensor[..],
-            &enc,
-            N_DEGREE_TESTS,
-            N_COL_OPENS,
-            &mut tr,
-        )
-        .unwrap();
+    tr.append_message(b"ncols", &(enc.get_n_col_opens() as u64).to_be_bytes()[..]);
+    tr.append_message(
+        b"ndegs",
+        &(enc.get_n_degree_tests() as u64).to_be_bytes()[..],
+    );
+    let pf = comm.prove(&outer_tensor[..], &enc, &mut tr).unwrap();
     let root = comm.get_root();
 
     b.iter(|| {
         let mut tr = Transcript::new(b"bench transcript");
         tr.append_message(b"polycommit", comm.get_root().as_ref());
         tr.append_message(b"rate", &0.25f64.to_be_bytes()[..]);
-        tr.append_message(b"ncols", &(N_COL_OPENS as u64).to_be_bytes()[..]);
-        tr.append_message(b"ndegs", &(N_DEGREE_TESTS as u64).to_be_bytes()[..]);
+        tr.append_message(b"ncols", &(enc.get_n_col_opens() as u64).to_be_bytes()[..]);
+        tr.append_message(
+            b"ndegs",
+            &(enc.get_n_degree_tests() as u64).to_be_bytes()[..],
+        );
         black_box(
             pf.verify(
                 root.as_ref(),
                 &outer_tensor[..],
                 &inner_tensor[..],
                 &enc,
-                N_DEGREE_TESTS,
-                N_COL_OPENS,
                 &mut tr,
             )
             .unwrap(),
