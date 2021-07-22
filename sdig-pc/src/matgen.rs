@@ -17,15 +17,16 @@ use rand_chacha::ChaCha20Rng;
 use rayon::prelude::*;
 use sprs::CsMat;
 
+// line 3 of Table 1 in ePrint
 // alpha = 0.178
 const ALPHA_NUM: usize = 89;
 const ALPHA_DEN: usize = 500;
-// beta = 0.0785
-const BETA_NUM: usize = 157;
-const BETA_DEN: usize = 2000;
-// r = 1.57
-const R_NUM: usize = 157;
-const R_DEN: usize = 100;
+// beta = 0.061
+const BETA_NUM: usize = 61;
+const BETA_DEN: usize = 1000;
+// r = 1.521
+const R_NUM: usize = 1521;
+const R_DEN: usize = 1000;
 // distance: beta / r
 pub(super) const DIST_NUM: usize = BETA_NUM * R_DEN;
 pub(super) const DIST_DEN: usize = BETA_DEN * R_NUM;
