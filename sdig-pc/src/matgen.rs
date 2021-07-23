@@ -31,19 +31,22 @@ const R_DEN: usize = 1000;
 pub(super) const DIST_NUM: usize = BETA_NUM * R_DEN;
 pub(super) const DIST_DEN: usize = BETA_DEN * R_NUM;
 
-// constants for computing cn (H is bin entropy fn)
-// H(beta) + alpha * H(1.2 * beta / alpha)
-const H_BETA_P_ALPHA_H_1P2BOA: f64 = 0.574433098504832;
-// beta * math.log(alpha / (1.2 * beta), 2)
-const BETA_LOG_AO1P2B: f64 = 0.0720691446849167;
+// constants for computing cn
+// def H(z):
+//     assert 0 < z < 1
+//     return - z * log(z, 2) - (1 - z) * log(1 - z, 2)
+// H(beta) + alpha * H(1.28 * beta / alpha)
+const H_BETA_P_ALPHA_H_1P28BOA: f64 = 0.507463951258999;
+// beta * log(alpha / (1.28 * beta), 2)
+const BETA_LOG_AO1P28B: f64 = 0.0725199892738724;
 
 // constants for computing dn
 // mu = r - 1 - r * alpha
 // nu = beta + alpha * beta + 0.03
 // r * alpha * H(beta / r) + mu * H(nu / mu)
-const R_ALPHA_H_BOR_P_MU_H_NUOMU: f64 = 0.365393858883888;
+const R_ALPHA_H_BOR_P_MU_H_NUOMU: f64 = 0.309708975622953;
 // alpha * beta * math.log(mu / nu, 2)
-const ALPHA_BETA_LOG_MON: f64 = 0.0174141735715980;
+const ALPHA_BETA_LOG_MON: f64 = 0.0140815225246004;
 
 const fn ceil_muldiv(n: usize, num: usize, den: usize) -> usize {
     (n * num + den - 1) / den
@@ -108,10 +111,10 @@ fn get_dims(
                 let mi = nm[1];
                 let cn = min(
                     max(
-                        ceil_muldiv(ni, 6 * BETA_NUM, 5 * BETA_DEN),
-                        3 + ceil_muldiv(ni, BETA_NUM, BETA_DEN),
+                        ceil_muldiv(ni, 32 * BETA_NUM, 25 * BETA_DEN),
+                        4 + ceil_muldiv(ni, BETA_NUM, BETA_DEN),
                     ),
-                    ((110f64 / (ni as f64) + H_BETA_P_ALPHA_H_1P2BOA) / BETA_LOG_AO1P2B).ceil()
+                    ((110f64 / (ni as f64) + H_BETA_P_ALPHA_H_1P28BOA) / BETA_LOG_AO1P28B).ceil()
                         as usize,
                 );
                 let cn = min(cn, mi); // can't generate more nonzero entries than there are columns
