@@ -1,0 +1,75 @@
+    Finished bench [optimized] target(s) in 0.03s
+     Running unittests (target/release/deps/lcpc2d-b663df2a57044731)
+
+running 7 tests
+test tests::commit ... ignored
+test tests::end_to_end ... ignored
+test tests::end_to_end_two_proofs ... ignored
+test tests::eval_outer ... ignored
+test tests::log2 ... ignored
+test tests::merkleize ... ignored
+test tests::open_column ... ignored
+
+test result: ok. 0 passed; 0 failed; 7 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests (target/release/deps/ligero_pc-3b42764d6f488188)
+
+running 21 tests
+test tests::end_to_end ... ignored
+test tests::end_to_end_two_proofs ... ignored
+test tests::get_dims ... ignored
+test bench::commit_Ft127_Blake2b_16 ... bench:  57,781,051 ns/iter (+/- 514,373)
+test bench::commit_Ft127_Blake2b_20 ... bench: 950,131,380 ns/iter (+/- 13,525,436)
+test bench::commit_Ft127_Blake2b_24 ... bench: 16,363,854,286 ns/iter (+/- 215,194,346)
+test bench::commit_Ft255_Blake2b_16 ... bench: 106,451,316 ns/iter (+/- 730,839)
+test bench::commit_Ft255_Blake2b_20 ... bench: 1,920,065,264 ns/iter (+/- 7,082,923)
+test bench::commit_Ft255_Blake2b_24 ... bench: 33,961,354,889 ns/iter (+/- 549,351,566)
+test bench::prove_Ft127_Blake2b_16  ... bench:   6,222,894 ns/iter (+/- 353,429)
+test bench::prove_Ft127_Blake2b_20  ... bench:  52,934,732 ns/iter (+/- 688,678)
+test bench::prove_Ft127_Blake2b_24  ... bench: 834,178,197 ns/iter (+/- 7,896,418)
+test bench::prove_Ft255_Blake2b_16  ... bench:   7,053,522 ns/iter (+/- 173,581)
+test bench::prove_Ft255_Blake2b_20  ... bench:  87,354,335 ns/iter (+/- 580,421)
+test bench::prove_Ft255_Blake2b_24  ... bench: 1,383,555,149 ns/iter (+/- 9,259,138)
+test bench::verify_Ft127_Blake2b_16 ... bench:   7,038,291 ns/iter (+/- 158,901)
+test bench::verify_Ft127_Blake2b_20 ... bench:  28,618,364 ns/iter (+/- 656,275)
+test bench::verify_Ft127_Blake2b_24 ... bench: 137,987,617 ns/iter (+/- 4,829,195)
+test bench::verify_Ft255_Blake2b_16 ... bench:   8,840,272 ns/iter (+/- 229,507)
+test bench::verify_Ft255_Blake2b_20 ... bench:  36,887,897 ns/iter (+/- 711,049)
+test bench::verify_Ft255_Blake2b_24 ... bench: 161,804,807 ns/iter (+/- 12,445,611)
+
+test result: ok. 0 passed; 0 failed; 3 ignored; 18 measured; 0 filtered out; finished in 17028.17s
+
+     Running unittests (target/release/deps/sdig_pc-7fe71d4644d0c844)
+
+running 22 tests
+test tests::end_to_end_one_proof ... ignored
+test tests::end_to_end_two_proofs ... ignored
+test tests::sprs_playground ... ignored
+test tests::test_matgen_encode ... ignored
+test bench::commit_Ft127_Blake2b_16 ... bench:  36,064,273 ns/iter (+/- 532,895)
+test bench::commit_Ft127_Blake2b_20 ... bench: 390,433,092 ns/iter (+/- 16,374,057)
+test bench::commit_Ft127_Blake2b_24 ... bench: 5,881,895,360 ns/iter (+/- 94,461,665)
+test bench::commit_Ft255_Blake2b_16 ... bench:  64,167,899 ns/iter (+/- 381,869)
+test bench::commit_Ft255_Blake2b_20 ... bench: 923,117,649 ns/iter (+/- 5,755,222)
+test bench::commit_Ft255_Blake2b_24 ... bench: 13,444,141,592 ns/iter (+/- 206,058,545)
+test bench::prove_Ft127_Blake2b_16  ... bench:  21,589,323 ns/iter (+/- 401,670)
+test bench::prove_Ft127_Blake2b_20  ... bench: 140,948,227 ns/iter (+/- 306,867)
+test bench::prove_Ft127_Blake2b_24  ... bench: 922,391,445 ns/iter (+/- 8,259,705)
+test bench::prove_Ft255_Blake2b_16  ... bench:  23,891,753 ns/iter (+/- 204,164)
+test bench::prove_Ft255_Blake2b_20  ... bench: 163,729,170 ns/iter (+/- 8,620,125)
+test bench::prove_Ft255_Blake2b_24  ... bench: 1,430,344,160 ns/iter (+/- 15,053,864)
+test bench::verify_Ft127_Blake2b_16 ... bench:  81,402,889 ns/iter (+/- 330,529)
+test bench::verify_Ft127_Blake2b_20 ... bench: 130,826,978 ns/iter (+/- 26,306,628)
+test bench::verify_Ft127_Blake2b_24 ... bench: 361,199,991 ns/iter (+/- 18,486,813)
+test bench::verify_Ft255_Blake2b_16 ... bench:  88,172,128 ns/iter (+/- 264,645)
+test bench::verify_Ft255_Blake2b_20 ... bench: 209,203,714 ns/iter (+/- 19,434,439)
+test bench::verify_Ft255_Blake2b_24 ... bench: 417,428,283 ns/iter (+/- 24,208,560)
+
+test result: ok. 0 passed; 0 failed; 4 ignored; 18 measured; 0 filtered out; finished in 7484.39s
+
+     Running unittests (target/release/deps/test_fields-a87f8429e4fdfa10)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
