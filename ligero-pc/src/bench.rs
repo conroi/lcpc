@@ -10,21 +10,12 @@
 use super::{LigeroCommit, LigeroEncoding};
 
 use blake2::{Blake2b, Digest};
-use ff::Field;
 use fffft::FieldFFT;
 use itertools::iterate;
 use lcpc2d::{FieldHash, LcEncoding, SizedField};
 use merlin::Transcript;
-use std::iter::repeat_with;
 use test::{black_box, Bencher};
-use test_fields::{def_bench, ft127::*, ft255::*};
-
-fn random_coeffs<Ft: Field>(log_len: usize) -> Vec<Ft> {
-    let mut rng = rand::thread_rng();
-    repeat_with(|| Ft::random(&mut rng))
-        .take(1 << log_len)
-        .collect()
-}
+use test_fields::{def_bench, ft127::*, ft255::*, random_coeffs};
 
 fn commit_bench<D, Ft>(b: &mut Bencher, log_len: usize)
 where

@@ -8,6 +8,8 @@
 // except according to those terms.
 #![allow(clippy::too_many_arguments)]
 
+use ff::Field;
+
 pub mod ft63 {
     use ff::PrimeField;
     use ff_derive_num::Num;
@@ -67,4 +69,26 @@ macro_rules! def_bench {
             }
         }
     };
+}
+
+/// generate random coeffs of length 2^`log_len`
+pub fn random_coeffs<Ft: Field>(log_len: usize) -> Vec<Ft> {
+    use std::io::{self, Write};
+    use std::iter::repeat_with;
+
+    let mut rng = rand::thread_rng();
+    let mut out = io::stderr();
+    let spc = 1 << (if log_len > 6 { log_len - 6 } else { log_len });
+
+    repeat_with(|| Ft::random(&mut rng))
+        .enumerate()
+        .take(1 << log_len)
+        .inspect(|(c, _)| {
+            if c % spc == 0 {
+                out.write_all(b".").unwrap();
+                out.flush().unwrap();
+            }
+        })
+        .map(|(_, v)| v)
+        .collect()
 }
