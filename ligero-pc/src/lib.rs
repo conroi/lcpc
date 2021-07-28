@@ -20,6 +20,7 @@ use fffft::{FFTError, FFTPrecomp, FieldFFT};
 use lcpc2d::{
     def_labels, n_degree_tests, FieldHash, LcCommit, LcEncoding, LcEvalProof, SizedField,
 };
+use typenum::{Unsigned, U1, U4};
 
 #[cfg(all(test, feature = "bench"))]
 mod bench;
@@ -28,22 +29,37 @@ mod tests;
 
 /// Encoding definition for Ligero-based polycommit
 #[derive(Clone, Debug)]
-pub struct LigeroEncoding<Ft> {
+pub struct LigeroEncodingRho<Ft, Rn, Rd> {
     n_per_row: usize, // number of inputs to the encoding
     n_cols: usize,    // number of outputs from the encoding
     pc: FFTPrecomp<Ft>,
+    _p: std::marker::PhantomData<(Rn, Rd)>,
 }
 
-impl<Ft> LigeroEncoding<Ft>
+impl<Ft, Rn, Rd> LigeroEncodingRho<Ft, Rn, Rd>
 where
     Ft: FieldFFT + SizedField,
+    Rn: Unsigned + std::fmt::Debug + std::marker::Sync,
+    Rd: Unsigned + std::fmt::Debug + std::marker::Sync,
 {
-    const RHO_INV: usize = 4; // rate of the R-S code
-    const LAMBDA: usize = 128; // security parameter in bits
+    const LAMBDA: usize = 128;
+
+    fn _rho_num() -> usize {
+        Rn::to_usize()
+    }
+
+    fn _rho_den() -> usize {
+        Rd::to_usize()
+    }
+
+    fn _rho() -> f64 {
+        assert!(Self::_rho_num() < Self::_rho_den());
+        Self::_rho_num() as f64 / Self::_rho_den() as f64
+    }
 
     // number of column openings required for soundness
     fn _n_col_opens() -> usize {
-        let den = ((1f64 + 1f64 / Self::RHO_INV as f64) / 2f64).log2();
+        let den = ((1f64 + Self::_rho()) / 2f64).log2();
         (-(Self::LAMBDA as f64) / den).ceil() as usize
     }
 
@@ -56,8 +72,8 @@ where
         let n_col_opens = Self::_n_col_opens();
         let lncf = (n_col_opens * len) as f64;
         // approximation of num_degree_tests
-        let ndt = Self::_n_degree_tests(lncf.sqrt().ceil() as usize * Self::RHO_INV) as f64;
-        let nc1 = ((lncf / ndt).sqrt().ceil() as usize * Self::RHO_INV)
+        let ndt = Self::_n_degree_tests((lncf.sqrt() / Self::_rho()).ceil() as usize) as f64;
+        let nc1 = (((lncf / ndt).sqrt() / Self::_rho()).ceil() as usize)
             .checked_next_power_of_two()
             .and_then(|nc| {
                 if nc > (1 << <Ft as FieldFFT>::S) {
@@ -68,7 +84,7 @@ where
             })?;
 
         // minimize nr subject to #cols and RHO
-        let np1 = nc1 / Self::RHO_INV as usize;
+        let np1 = nc1 * Self::_rho_num() / Self::_rho_den();
         let nr1 = (len + np1 - 1) / np1;
         let nd1 = Self::_n_degree_tests(nc1);
         assert!(np1.is_power_of_two());
@@ -127,13 +143,16 @@ where
             n_per_row,
             n_cols,
             pc,
+            _p: std::marker::PhantomData::default(),
         }
     }
 }
 
-impl<Ft> LcEncoding for LigeroEncoding<Ft>
+impl<Ft, Rn, Rd> LcEncoding for LigeroEncodingRho<Ft, Rn, Rd>
 where
     Ft: FieldFFT + FieldHash + SizedField,
+    Rn: Unsigned + std::fmt::Debug + std::marker::Sync,
+    Rd: Unsigned + std::fmt::Debug + std::marker::Sync,
 {
     type F = Ft;
     type Err = FFTError;
@@ -165,6 +184,9 @@ where
         Self::_n_degree_tests(self.n_cols)
     }
 }
+
+/// Ligero-based polynomial commitment, fixing Rho and Lambda
+pub type LigeroEncoding<F> = LigeroEncodingRho<F, U1, U4>;
 
 /// Ligero-based polynomial commitment
 pub type LigeroCommit<D, F> = LcCommit<D, LigeroEncoding<F>>;

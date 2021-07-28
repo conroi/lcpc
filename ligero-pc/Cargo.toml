@@ -12,6 +12,7 @@ repository = "https://github.com/kwantam/lcpc"
 [dependencies]
 fffft = "0.4"
 lcpc2d = { path = "../lcpc2d" }
+typenum = "1.13"
 
 [dev-dependencies]
 blake2 = "0.9"

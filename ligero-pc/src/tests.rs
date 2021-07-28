@@ -31,7 +31,10 @@ fn get_dims() {
             let (n_rows, n_per_row, n_cols) = LigeroEncoding::<Ft63>::_get_dims(len).unwrap();
             assert!(n_rows * n_per_row >= len);
             assert!((n_rows - 1) * n_per_row < len);
-            assert!(n_per_row * LigeroEncoding::<Ft63>::RHO_INV <= n_cols);
+            assert!(
+                n_per_row * LigeroEncoding::<Ft63>::_rho_den() / LigeroEncoding::<Ft63>::_rho_num()
+                    <= n_cols
+            );
             assert!(LigeroEncoding::<Ft63>::_dims_ok(n_per_row, n_cols));
         }
     }
