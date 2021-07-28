@@ -80,7 +80,7 @@ pub fn random_coeffs<Ft: Field>(log_len: usize) -> Vec<Ft> {
     let mut out = io::stderr();
     let spc = 1 << (if log_len > 6 { log_len - 6 } else { log_len });
 
-    repeat_with(|| Ft::random(&mut rng))
+    let ret = repeat_with(|| Ft::random(&mut rng))
         .enumerate()
         .take(1 << log_len)
         .inspect(|(c, _)| {
@@ -90,5 +90,8 @@ pub fn random_coeffs<Ft: Field>(log_len: usize) -> Vec<Ft> {
             }
         })
         .map(|(_, v)| v)
-        .collect()
+        .collect();
+    out.write_all(b"\n").unwrap();
+    out.flush().unwrap();
+    ret
 }

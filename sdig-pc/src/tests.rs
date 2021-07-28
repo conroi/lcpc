@@ -19,7 +19,7 @@ use rand::{thread_rng, Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use sprs::{CsMat, TriMat};
 use std::iter::repeat_with;
-use test_fields::ft63::*;
+use test_fields::{ft255::*, ft63::*, random_coeffs};
 
 #[test]
 fn sprs_playground() {
@@ -81,9 +81,46 @@ fn test_matgen_encode() {
 }
 
 #[test]
+fn proof_sizes() {
+    for lgl in (8..=22).step_by(2) {
+        // commit to random poly of specified size
+        let coeffs = random_coeffs(lgl);
+        let enc = SdigEncoding::new(coeffs.len(), 0);
+        let comm = SdigCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
+        let root = comm.get_root();
+
+        // evaluate the random polynomial we just generated at a random point x
+        let x = Ft255::random(&mut rand::thread_rng());
+
+        // compute the outer and inner tensors for powers of x
+        // NOTE: we treat coeffs as a univariate polynomial, but it doesn't
+        // really matter --- the only difference from a multilinear is the
+        // way we compute outer_tensor and inner_tensor from the eval point
+        let inner_tensor: Vec<Ft255> = iterate(Ft255::one(), |&v| v * x)
+            .take(comm.get_n_per_row())
+            .collect();
+        let outer_tensor: Vec<Ft255> = {
+            let xr = x * inner_tensor.last().unwrap();
+            iterate(Ft255::one(), |&v| v * xr)
+                .take(comm.get_n_rows())
+                .collect()
+        };
+
+        // compute an evaluation proof
+        let mut tr1 = Transcript::new(b"test transcript");
+        tr1.append_message(b"polycommit", root.as_ref());
+        tr1.append_message(b"ncols", &(enc.get_n_col_opens() as u64).to_be_bytes()[..]);
+        let pf = comm.prove(&outer_tensor[..], &enc, &mut tr1).unwrap();
+        let encoded: Vec<u8> = bincode::serialize(&pf).unwrap();
+
+        println!("{}: {}", lgl, encoded.len());
+    }
+}
+
+#[test]
 fn end_to_end_one_proof() {
     // commit to a random polynomial at a random rate
-    let coeffs = random_coeffs();
+    let coeffs = get_random_coeffs();
     let enc = SdigEncoding::new(coeffs.len(), 0);
     let comm = SdigCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
@@ -130,7 +167,7 @@ fn end_to_end_one_proof() {
 #[test]
 fn end_to_end_two_proofs() {
     // commit to a random polynomial at a random rate
-    let coeffs = random_coeffs();
+    let coeffs = get_random_coeffs();
     let enc = SdigEncoding::new(coeffs.len(), 1);
     let comm = SdigCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
@@ -214,7 +251,7 @@ fn end_to_end_two_proofs() {
     assert_eq!(res, res2);
 }
 
-fn random_coeffs() -> Vec<Ft63> {
+fn get_random_coeffs() -> Vec<Ft63> {
     let mut rng = rand::thread_rng();
 
     let lgl = 16 + rng.gen::<usize>() % 8;

@@ -7,37 +7,58 @@
 // This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use super::{LigeroCommit, LigeroEncoding};
+use super::LigeroEncodingRho;
 
 use blake2::{Blake2b, Digest};
 use fffft::FieldFFT;
 use itertools::iterate;
-use lcpc2d::{FieldHash, LcEncoding, SizedField};
+use lcpc2d::{FieldHash, LcCommit, LcEncoding, SizedField};
 use merlin::Transcript;
 use test::{black_box, Bencher};
 use test_fields::{def_bench, ft127::*, ft255::*, random_coeffs};
+use typenum::Unsigned;
+
+fn _commit_bench<D, Ft, Rn, Rd>(b: &mut Bencher, log_len: usize)
+where
+    D: Digest,
+    Ft: FieldFFT + FieldHash + SizedField,
+    Rn: Unsigned + std::fmt::Debug + std::marker::Sync,
+    Rd: Unsigned + std::fmt::Debug + std::marker::Sync,
+{
+    let coeffs = random_coeffs(log_len);
+    let enc = LigeroEncodingRho::<Ft, Rn, Rd>::new(coeffs.len());
+
+    b.iter(|| {
+        black_box(LcCommit::<D, _>::commit(&coeffs, &enc).unwrap());
+    });
+}
 
 fn commit_bench<D, Ft>(b: &mut Bencher, log_len: usize)
 where
     D: Digest,
     Ft: FieldFFT + FieldHash + SizedField,
 {
-    let coeffs = random_coeffs(log_len);
-    let enc = LigeroEncoding::new(coeffs.len());
-
-    b.iter(|| {
-        black_box(LigeroCommit::<D, Ft>::commit(&coeffs, &enc).unwrap());
-    });
+    _commit_bench::<D, Ft, typenum::U1, typenum::U4>(b, log_len);
 }
 
-fn prove_bench<D, Ft>(b: &mut Bencher, log_len: usize)
+fn commit_isz_bench<D, Ft>(b: &mut Bencher, log_len: usize)
 where
     D: Digest,
     Ft: FieldFFT + FieldHash + SizedField,
 {
+    _commit_bench::<D, Ft, typenum::U37, typenum::U38>(b, log_len);
+}
+
+fn _prove_bench<D, Ft, Rn, Rd>(b: &mut Bencher, log_len: usize)
+where
+    D: Digest,
+    Ft: FieldFFT + FieldHash + SizedField,
+    Rn: Unsigned + std::fmt::Debug + std::marker::Sync,
+    Rd: Unsigned + std::fmt::Debug + std::marker::Sync,
+{
     let coeffs = random_coeffs(log_len);
-    let enc = LigeroEncoding::new(coeffs.len());
-    let comm = LigeroCommit::<D, Ft>::commit(&coeffs, &enc).unwrap();
+    let enc = LigeroEncodingRho::<Ft, Rn, Rd>::new(coeffs.len());
+    let comm = LcCommit::<D, _>::commit(&coeffs, &enc).unwrap();
 
     // random point to eval at
     let x = Ft::random(&mut rand::thread_rng());
@@ -64,14 +85,32 @@ where
     });
 }
 
-fn verify_bench<D, Ft>(b: &mut Bencher, log_len: usize)
+fn prove_bench<D, Ft>(b: &mut Bencher, log_len: usize)
 where
     D: Digest,
     Ft: FieldFFT + FieldHash + SizedField,
 {
+    _prove_bench::<D, Ft, typenum::U1, typenum::U4>(b, log_len);
+}
+
+fn prove_isz_bench<D, Ft>(b: &mut Bencher, log_len: usize)
+where
+    D: Digest,
+    Ft: FieldFFT + FieldHash + SizedField,
+{
+    _prove_bench::<D, Ft, typenum::U37, typenum::U38>(b, log_len);
+}
+
+fn _verify_bench<D, Ft, Rn, Rd>(b: &mut Bencher, log_len: usize)
+where
+    D: Digest,
+    Ft: FieldFFT + FieldHash + SizedField,
+    Rn: Unsigned + std::fmt::Debug + std::marker::Sync,
+    Rd: Unsigned + std::fmt::Debug + std::marker::Sync,
+{
     let coeffs = random_coeffs(log_len);
-    let enc = LigeroEncoding::new(coeffs.len());
-    let comm = LigeroCommit::<D, Ft>::commit(&coeffs, &enc).unwrap();
+    let enc = LigeroEncodingRho::<Ft, Rn, Rd>::new(coeffs.len());
+    let comm = LcCommit::<D, _>::commit(&coeffs, &enc).unwrap();
 
     // random point to eval at
     let x = Ft::random(&mut rand::thread_rng());
@@ -118,6 +157,22 @@ where
     });
 }
 
+fn verify_bench<D, Ft>(b: &mut Bencher, log_len: usize)
+where
+    D: Digest,
+    Ft: FieldFFT + FieldHash + SizedField,
+{
+    _verify_bench::<D, Ft, typenum::U1, typenum::U4>(b, log_len);
+}
+
+fn verify_isz_bench<D, Ft>(b: &mut Bencher, log_len: usize)
+where
+    D: Digest,
+    Ft: FieldFFT + FieldHash + SizedField,
+{
+    _verify_bench::<D, Ft, typenum::U37, typenum::U38>(b, log_len);
+}
+
 def_bench!(commit, Ft127, Blake2b, 16);
 def_bench!(commit, Ft127, Blake2b, 20);
 def_bench!(commit, Ft127, Blake2b, 24);
@@ -141,3 +196,15 @@ def_bench!(prove, Ft255, Blake2b, 24);
 def_bench!(verify, Ft255, Blake2b, 16);
 def_bench!(verify, Ft255, Blake2b, 20);
 def_bench!(verify, Ft255, Blake2b, 24);
+
+def_bench!(commit_isz, Ft255, Blake2b, 16);
+def_bench!(commit_isz, Ft255, Blake2b, 20);
+def_bench!(commit_isz, Ft255, Blake2b, 24);
+
+def_bench!(prove_isz, Ft255, Blake2b, 16);
+def_bench!(prove_isz, Ft255, Blake2b, 20);
+def_bench!(prove_isz, Ft255, Blake2b, 24);
+
+def_bench!(verify_isz, Ft255, Blake2b, 16);
+def_bench!(verify_isz, Ft255, Blake2b, 20);
+def_bench!(verify_isz, Ft255, Blake2b, 24);

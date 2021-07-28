@@ -87,7 +87,7 @@ where
         let np1 = nc1 * Self::_rho_num() / Self::_rho_den();
         let nr1 = (len + np1 - 1) / np1;
         let nd1 = Self::_n_degree_tests(nc1);
-        assert!(np1.is_power_of_two());
+        //assert!(np1.is_power_of_two());
         assert!(np1 * nr1 >= len);
         assert!(np1 * (nr1 - 1) < len);
 
@@ -95,7 +95,7 @@ where
         let np2 = np1 / 2;
         let nr2 = (len + np2 - 1) / np2;
         let nd2 = Self::_n_degree_tests(nc2);
-        assert!(np2.is_power_of_two());
+        //assert!(np2.is_power_of_two());
         assert!(nc2.is_power_of_two());
         assert!(np2 * nr2 >= len);
         assert!(np2 * (nr2 - 1) < len);
