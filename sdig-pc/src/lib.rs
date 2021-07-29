@@ -16,8 +16,9 @@ sdig-pc is a polynomial commitment scheme from the SDIG expander code
 #[cfg(feature = "bench")]
 extern crate test;
 
+use codespec::{SdigCode3, SdigSpecification};
 use encode::{codeword_length, encode};
-use matgen::{generate, DIST_DEN, DIST_NUM};
+use matgen::generate;
 
 use ff::Field;
 use lcpc2d::{
@@ -26,6 +27,7 @@ use lcpc2d::{
 use num_traits::Num;
 use sprs::{CsMat, MulAcc};
 
+pub mod codespec;
 pub mod encode;
 pub mod matgen;
 
@@ -36,23 +38,24 @@ mod tests;
 
 /// Encoding definition for SDIG expander-based polycommit
 #[derive(Clone, Debug)]
-pub struct SdigEncoding<Ft> {
+pub struct SdigEncodingS<Ft, S> {
     n_per_row: usize, // number of inputs to the encoding
     n_cols: usize,    // number of outputs from the encoding
     precodes: Vec<CsMat<Ft>>,
     postcodes: Vec<CsMat<Ft>>,
+    _p: std::marker::PhantomData<S>,
 }
 
-impl<Ft> SdigEncoding<Ft>
+impl<Ft, S> SdigEncodingS<Ft, S>
 where
     Ft: Field + Num + SizedField,
+    S: SdigSpecification,
 {
-    const BASELEN: usize = 20;
     const LAMBDA: usize = 128;
 
     // number of column openings required for soundness
     fn _n_col_opens() -> usize {
-        let dist_ov_3 = DIST_NUM as f64 / (3 * DIST_DEN) as f64;
+        let dist_ov_3 = S::dist() / 3f64;
         let den = (1f64 - dist_ov_3).log2();
         (-(Self::LAMBDA as f64) / den).ceil() as usize
     }
@@ -80,7 +83,7 @@ where
         let sz2 = n_col_opens * nr2 + (1 + nd2) * np2;
         let n_per_row = if sz1 < sz2 { np1 } else { np2 };
 
-        let (precodes, postcodes) = generate(n_per_row, Self::BASELEN, seed, Ft::FLOG2 as f64);
+        let (precodes, postcodes) = generate::<Ft, S>(n_per_row, seed);
         assert_eq!(n_per_row, precodes[0].cols());
         let n_cols = codeword_length(&precodes, &postcodes);
         Self {
@@ -88,6 +91,7 @@ where
             n_cols,
             precodes,
             postcodes,
+            _p: std::marker::PhantomData::default(),
         }
     }
 
@@ -117,7 +121,7 @@ where
 
     /// Create a new SdigEncoding for a commitment with dimensions `n_per_row` and `n_cols`
     pub fn new_from_dims(n_per_row: usize, n_cols: usize, seed: u64) -> Self {
-        let (precodes, postcodes) = generate(n_per_row, Self::BASELEN, seed, Ft::FLOG2 as f64);
+        let (precodes, postcodes) = generate::<Ft, S>(n_per_row, seed);
         assert_eq!(n_per_row, precodes[0].cols());
         assert_eq!(n_cols, codeword_length(&precodes, &postcodes));
         Self {
@@ -125,13 +129,15 @@ where
             n_cols,
             precodes,
             postcodes,
+            _p: std::marker::PhantomData::default(),
         }
     }
 }
 
-impl<Ft> LcEncoding for SdigEncoding<Ft>
+impl<Ft, S> LcEncoding for SdigEncodingS<Ft, S>
 where
     Ft: Field + FieldHash + MulAcc + Num + SizedField,
+    S: SdigSpecification + std::fmt::Debug + std::clone::Clone + std::marker::Sync,
 {
     type F = Ft;
     type Err = std::io::Error;
@@ -165,6 +171,9 @@ where
         Self::_n_degree_tests(self.n_cols)
     }
 }
+
+/// default encoding
+type SdigEncoding<F> = SdigEncodingS<F, SdigCode3>;
 
 /// SDIG expander-based polynomial commitment
 pub type SdigCommit<D, F> = LcCommit<D, SdigEncoding<F>>;

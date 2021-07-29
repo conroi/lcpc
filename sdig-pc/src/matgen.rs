@@ -9,60 +9,28 @@
 
 /*! generate a random code for a given n */
 
+use crate::codespec::SdigSpecification;
+
 use ff::Field;
 use itertools::iterate;
+use lcpc2d::SizedField;
 use num_traits::Num;
 use rand::{distributions::Uniform, Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use rayon::prelude::*;
 use sprs::CsMat;
 
-// line 3 of Table 1 in ePrint
-// alpha = 0.178
-const ALPHA_NUM: usize = 89;
-const ALPHA_DEN: usize = 500;
-// beta = 0.061
-const BETA_NUM: usize = 61;
-const BETA_DEN: usize = 1000;
-// r = 1.521
-const R_NUM: usize = 1521;
-const R_DEN: usize = 1000;
-// distance: beta / r
-pub(super) const DIST_NUM: usize = BETA_NUM * R_DEN;
-pub(super) const DIST_DEN: usize = BETA_DEN * R_NUM;
-
-// constants for computing cn
-// def H(z):
-//     assert 0 < z < 1
-//     return - z * log(z, 2) - (1 - z) * log(1 - z, 2)
-// H(beta) + alpha * H(1.28 * beta / alpha)
-const H_BETA_P_ALPHA_H_1P28BOA: f64 = 0.507463951258999;
-// beta * log(alpha / (1.28 * beta), 2)
-const BETA_LOG_AO1P28B: f64 = 0.0725199892738724;
-
-// constants for computing dn
-// mu = r - 1 - r * alpha
-// nu = beta + alpha * beta + 0.03
-// r * alpha * H(beta / r) + mu * H(nu / mu)
-const R_ALPHA_H_BOR_P_MU_H_NUOMU: f64 = 0.309708975622953;
-// alpha * beta * math.log(mu / nu, 2)
-const ALPHA_BETA_LOG_MON: f64 = 0.0140815225246004;
-
 const fn ceil_muldiv(n: usize, num: usize, den: usize) -> usize {
     (n * num + den - 1) / den
 }
 
-/// Generate a random code from a given seed with a base codeword length of `baselen`
-pub fn generate<F>(
-    n: usize,
-    baselen: usize,
-    seed: u64,
-    log2p: f64,
-) -> (Vec<CsMat<F>>, Vec<CsMat<F>>)
+/// Generate a random code from a given seed
+pub fn generate<F, S>(n: usize, seed: u64) -> (Vec<CsMat<F>>, Vec<CsMat<F>>)
 where
-    F: Field + Num,
+    F: Field + Num + SizedField,
+    S: SdigSpecification,
 {
-    let (pre_dims, post_dims) = get_dims(n, baselen, log2p);
+    let (pre_dims, post_dims) = get_dims::<S>(n, F::FLOG2 as f64);
     assert!(!pre_dims.is_empty());
 
     let mut precodes = Vec::with_capacity(pre_dims.len());
@@ -85,21 +53,21 @@ where
 
 // compute dimensions for all of the matrices used by this code
 #[allow(clippy::type_complexity)]
-fn get_dims(
+fn get_dims<S: SdigSpecification>(
     n: usize,
-    baselen: usize,
     log2p: f64,
 ) -> (Vec<(usize, usize, usize)>, Vec<(usize, usize, usize)>) {
     use std::cmp::{max, min};
+    let baselen = S::baselen();
     assert!(n > baselen);
 
     // figure out dimensions for the precode and postcode matrices
     let pre_dims = {
-        let mut tmp: Vec<_> = iterate(n, |&ni| ceil_muldiv(ni, ALPHA_NUM, ALPHA_DEN))
+        let mut tmp: Vec<_> = iterate(n, |&ni| ceil_muldiv(ni, S::alpha_num(), S::alpha_den()))
             .take_while(|&ni| ni > baselen)
             .collect();
         if let Some(&ni) = tmp.last() {
-            let last = ceil_muldiv(ni, ALPHA_NUM, ALPHA_DEN);
+            let last = ceil_muldiv(ni, S::alpha_num(), S::alpha_den());
             assert!(last <= baselen);
             tmp.push(last);
         }
@@ -111,11 +79,10 @@ fn get_dims(
                 let mi = nm[1];
                 let cn = min(
                     max(
-                        ceil_muldiv(ni, 32 * BETA_NUM, 25 * BETA_DEN),
-                        4 + ceil_muldiv(ni, BETA_NUM, BETA_DEN),
+                        ceil_muldiv(ni, 32 * S::beta_num(), 25 * S::beta_den()),
+                        4 + ceil_muldiv(ni, S::beta_num(), S::beta_den()),
                     ),
-                    ((110f64 / (ni as f64) + H_BETA_P_ALPHA_H_1P28BOA) / BETA_LOG_AO1P28B).ceil()
-                        as usize,
+                    ((110f64 / (ni as f64) + S::cnst_cn_1()) / S::cnst_cn_2()).ceil() as usize,
                 );
                 let cn = min(cn, mi); // can't generate more nonzero entries than there are columns
                 (ni, mi, cn)
@@ -126,14 +93,13 @@ fn get_dims(
     let post_dims = pre_dims
         .iter()
         .map(|&(ni, mi, _)| {
-            let niprime = ceil_muldiv(mi, R_NUM, R_DEN);
-            let miprime = ceil_muldiv(ni, R_NUM, R_DEN) - ni - niprime;
-            let tmp1 = ceil_muldiv(ni, 2 * BETA_NUM, BETA_DEN); // 2 * beta * ni
-            let tmp2 = ceil_muldiv(ni, R_NUM, R_DEN) - ni + 110; // ni * (r - 1 + 110/ni)
+            let niprime = ceil_muldiv(mi, S::r_num(), S::r_den());
+            let miprime = ceil_muldiv(ni, S::r_num(), S::r_den()) - ni - niprime;
+            let tmp1 = ceil_muldiv(ni, 2 * S::beta_num(), S::beta_den()); // 2 * beta * ni
+            let tmp2 = ceil_muldiv(ni, S::r_num(), S::r_den()) - ni + 110; // ni * (r - 1 + 110/ni)
             let dn = min(
                 tmp1 + (tmp2 as f64 / log2p).ceil() as usize,
-                ((110f64 / (ni as f64) + R_ALPHA_H_BOR_P_MU_H_NUOMU) / ALPHA_BETA_LOG_MON).ceil()
-                    as usize,
+                ((110f64 / (ni as f64) + S::cnst_dn_1()) / S::cnst_dn_2()).ceil() as usize,
             );
             let dn = min(dn, miprime); // can't generate more nonzero entries than there are columns
             (niprime, miprime, dn)

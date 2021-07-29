@@ -7,7 +7,7 @@
 // This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use super::{SdigCommit, SdigEncoding, SizedField};
+use super::{SdigCommit, SdigEncoding};
 
 use blake2::Blake2b;
 use ff::Field;
@@ -65,12 +65,12 @@ fn sprs_playground() {
 #[test]
 fn test_matgen_encode() {
     let mut rng = thread_rng();
+    use super::codespec::SdigCode3;
     use super::encode::{codeword_length, encode};
     use super::matgen::generate;
 
-    let baselen = 20;
     let n = 256usize + (rng.gen::<usize>() % 4096);
-    let (precodes, postcodes) = generate(n, baselen, 0u64, Ft63::FLOG2 as f64);
+    let (precodes, postcodes) = generate::<Ft63, SdigCode3>(n, 0u64);
 
     let xi_len = codeword_length(&precodes, &postcodes);
     let mut xi = Vec::with_capacity(xi_len);
