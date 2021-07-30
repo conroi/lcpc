@@ -1,0 +1,30 @@
+sdig
+
+32c
+---
+1: test bench::commit_Ft255_Blake2b_16 ... bench:  26,379,451 ns/iter (+/- 8,264,115)
+2: test bench::commit_Ft255_Blake2b_16 ... bench:  35,494,884 ns/iter (+/- 3,372,785)
+3: test bench::commit_Ft255_Blake2b_16 ... bench:  22,987,334 ns/iter (+/- 7,183,484)
+4: test bench::commit_Ft255_Blake2b_16 ... bench:  36,367,823 ns/iter (+/- 5,880,718)
+5: test bench::commit_Ft255_Blake2b_16 ... bench:  37,450,930 ns/iter (+/- 7,315,157)
+6: test bench::commit_Ft255_Blake2b_16 ... bench:  28,559,379 ns/iter (+/- 4,428,682)
+
+ 1c
+---
+1: test bench::commit_Ft255_Blake2b_16 ... bench:  62,647,387 ns/iter (+/- 861,682)
+2: test bench::commit_Ft255_Blake2b_16 ... bench:  71,792,189 ns/iter (+/- 643,293)
+3: test bench::commit_Ft255_Blake2b_16 ... bench:  65,724,157 ns/iter (+/- 745,570)
+4: test bench::commit_Ft255_Blake2b_16 ... bench:  79,539,748 ns/iter (+/- 786,216)
+5: test bench::commit_Ft255_Blake2b_16 ... bench:  81,302,763 ns/iter (+/- 592,955)
+6: test bench::commit_Ft255_Blake2b_16 ... bench:  85,122,988 ns/iter (+/- 511,559)
+
+ligero
+
+ 1c
+---
+1 (80/81): test bench::commit_isz_Ft255_Blake2b_16 ... bench:  45,573,144 ns/iter (+/- 647,246)
+2 (54/55): test bench::commit_isz_Ft255_Blake2b_16 ... bench:  45,095,085 ns/iter (+/- 363,401)
+3 (39/40): test bench::commit_isz_Ft255_Blake2b_16 ... bench:  45,327,650 ns/iter (+/- 440,515)
+4 (30/31): test bench::commit_isz_Ft255_Blake2b_16 ... bench:  45,520,218 ns/iter (+/- 708,757)
+5 (25/26): test bench::commit_isz_Ft255_Blake2b_16 ... bench:  45,328,754 ns/iter (+/- 535,677)
+6 (21/22): test bench::commit_isz_Ft255_Blake2b_16 ... bench:  45,302,130 ns/iter (+/- 498,632)
