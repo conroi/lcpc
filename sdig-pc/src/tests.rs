@@ -120,6 +120,29 @@ fn proof_sizes() {
 }
 
 #[test]
+fn rough_bench() {
+    use super::codespec::SdigCode3 as TestCode;
+    use std::time::Instant;
+
+    for lgl in (9..=29).step_by(2) {
+        // commit to random poly of specified size
+        let coeffs = random_coeffs(lgl);
+        let enc = SdigEncodingS::<Ft255, TestCode>::new(coeffs.len(), 0);
+        let mut xxx = 0u8;
+        let n_iters = 10;
+
+        let now = Instant::now();
+        for i in 0..n_iters {
+            let comm = LcCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
+            let root = comm.get_root();
+            xxx ^= root.as_ref()[i];
+        }
+        let dur = now.elapsed().as_nanos() / n_iters as u128;
+        println!("{}: {} {:?}", lgl, dur, xxx);
+    }
+}
+
+#[test]
 fn end_to_end_one_proof() {
     // commit to a random polynomial at a random rate
     let coeffs = get_random_coeffs();

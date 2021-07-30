@@ -16,7 +16,7 @@ use lcpc2d::{FieldHash, LcCommit, LcEncoding, SizedField};
 use merlin::Transcript;
 use test::{black_box, Bencher};
 use test_fields::{def_bench, ft127::*, ft255::*, random_coeffs};
-use typenum::{U39 as TLo, Unsigned};
+use typenum::{Unsigned, U39 as TLo};
 
 type THi = <TLo as std::ops::Add<typenum::U1>>::Output;
 

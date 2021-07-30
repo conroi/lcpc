@@ -41,7 +41,34 @@ fn get_dims() {
 }
 
 #[test]
+fn rough_bench() {
+    use std::time::Instant;
+    use typenum::U39 as TLo;
+    type THi = <TLo as std::ops::Add<typenum::U1>>::Output;
+
+    for lgl in (9..=29).step_by(2) {
+        // commit to random poly of specified size
+        let coeffs = random_coeffs(lgl);
+        let enc = LigeroEncodingRho::<Ft255, TLo, THi>::new(coeffs.len());
+        let mut xxx = 0u8;
+        let n_iters = 10;
+
+        let now = Instant::now();
+        for i in 0..n_iters {
+            let comm = LcCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
+            let root = comm.get_root();
+            xxx ^= root.as_ref()[i];
+        }
+        let dur = now.elapsed().as_nanos() / n_iters as u128;
+        println!("{}: {} {:?}", lgl, dur, xxx);
+    }
+}
+
+#[test]
 fn proof_sizes() {
+    use typenum::U39 as TLo;
+    type THi = <TLo as std::ops::Add<typenum::U1>>::Output;
+
     for lgl in (8..=22).step_by(2) {
         // Code1 = 80/81
         // Code2 = 54/55
@@ -49,8 +76,6 @@ fn proof_sizes() {
         // Code4 = 30/31
         // Code5 = 25/26
         // Code6 = 21/22
-        use typenum::U39 as TLo;
-        type THi = <TLo as std::ops::Add<typenum::U1>>::Output;
         // commit to random poly of specified size
         let coeffs = random_coeffs(lgl);
         let enc = LigeroEncodingRho::<Ft255, TLo, THi>::new(coeffs.len());
