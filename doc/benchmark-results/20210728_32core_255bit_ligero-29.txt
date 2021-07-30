@@ -1,0 +1,10 @@
+   Compiling ligero-pc v0.1.0 (/home/kwantam/git/github.com/lcpc/ligero-pc)
+    Finished bench [optimized] target(s) in 4.56s
+     Running unittests (/home/kwantam/git/github.com/lcpc/target/release/deps/ligero_pc-15fa3e1c702b20a7)
+
+running 1 test
+................................................................
+test bench::commit_isz_Ft255_Blake2b_29 ... bench: 44,683,695,382 ns/iter (+/- 2,893,870,062)
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 1 measured; 32 filtered out; finished in 13512.69s
+

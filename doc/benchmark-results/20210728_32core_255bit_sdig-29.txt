@@ -1,0 +1,10 @@
+   Compiling sdig-pc v0.1.0 (/home/kwantam/git/github.com/lcpc/sdig-pc)
+    Finished bench [optimized] target(s) in 4.03s
+     Running unittests (/home/kwantam/git/github.com/lcpc/target/release/deps/sdig_pc-2d58c11272a3e580)
+
+running 1 test
+................................................................
+test bench::commit_Ft255_Blake2b_29 ... bench: 60,984,943,956 ns/iter (+/- 2,041,717,990)
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 1 measured; 24 filtered out; finished in 18429.69s
+
