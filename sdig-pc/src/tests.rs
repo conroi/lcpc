@@ -7,12 +7,12 @@
 // This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use super::{SdigCommit, SdigEncoding};
+use super::{SdigCommit, SdigEncoding, SdigEncodingS};
 
 use blake2::Blake2b;
 use ff::Field;
 use itertools::iterate;
-use lcpc2d::LcEncoding;
+use lcpc2d::{LcCommit, LcEncoding};
 use merlin::Transcript;
 use ndarray::{linalg::Dot, Array};
 use rand::{thread_rng, Rng, SeedableRng};
@@ -82,11 +82,13 @@ fn test_matgen_encode() {
 
 #[test]
 fn proof_sizes() {
+    use super::codespec::SdigCode3;
+
     for lgl in (8..=22).step_by(2) {
         // commit to random poly of specified size
         let coeffs = random_coeffs(lgl);
-        let enc = SdigEncoding::new(coeffs.len(), 0);
-        let comm = SdigCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
+        let enc = SdigEncodingS::<Ft255, SdigCode3>::new(coeffs.len(), 0);
+        let comm = LcCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
         let root = comm.get_root();
 
         // evaluate the random polynomial we just generated at a random point x
