@@ -65,12 +65,12 @@ fn sprs_playground() {
 #[test]
 fn test_matgen_encode() {
     let mut rng = thread_rng();
-    use super::codespec::SdigCode3;
+    use super::codespec::SdigCode3 as TestCode;
     use super::encode::{codeword_length, encode};
     use super::matgen::generate;
 
     let n = 256usize + (rng.gen::<usize>() % 4096);
-    let (precodes, postcodes) = generate::<Ft63, SdigCode3>(n, 0u64);
+    let (precodes, postcodes) = generate::<Ft63, TestCode>(n, 0u64);
 
     let xi_len = codeword_length(&precodes, &postcodes);
     let mut xi = Vec::with_capacity(xi_len);
@@ -82,12 +82,12 @@ fn test_matgen_encode() {
 
 #[test]
 fn proof_sizes() {
-    use super::codespec::SdigCode3;
+    use super::codespec::SdigCode3 as TestCode;
 
     for lgl in (8..=22).step_by(2) {
         // commit to random poly of specified size
         let coeffs = random_coeffs(lgl);
-        let enc = SdigEncodingS::<Ft255, SdigCode3>::new(coeffs.len(), 0);
+        let enc = SdigEncodingS::<Ft255, TestCode>::new(coeffs.len(), 0);
         let comm = LcCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
         let root = comm.get_root();
 

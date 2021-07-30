@@ -16,7 +16,7 @@ sdig-pc is a polynomial commitment scheme from the SDIG expander code
 #[cfg(feature = "bench")]
 extern crate test;
 
-use codespec::{SdigCode3, SdigSpecification};
+use codespec::{SdigCode3 as SdigCodeDflt, SdigSpecification};
 use encode::{codeword_length, encode};
 use matgen::generate;
 
@@ -173,7 +173,7 @@ where
 }
 
 /// default encoding
-type SdigEncoding<F> = SdigEncodingS<F, SdigCode3>;
+type SdigEncoding<F> = SdigEncodingS<F, SdigCodeDflt>;
 
 /// SDIG expander-based polynomial commitment
 pub type SdigCommit<D, F> = LcCommit<D, SdigEncoding<F>>;

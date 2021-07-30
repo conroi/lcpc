@@ -43,9 +43,17 @@ fn get_dims() {
 #[test]
 fn proof_sizes() {
     for lgl in (8..=22).step_by(2) {
+        // Code1 = 80/81
+        // Code2 = 54/55
+        // Code3 = 39/40
+        // Code4 = 30/31
+        // Code5 = 25/26
+        // Code6 = 21/22
+        use typenum::U39 as TLo;
+        type THi = <TLo as std::ops::Add<typenum::U1>>::Output;
         // commit to random poly of specified size
         let coeffs = random_coeffs(lgl);
-        let enc = LigeroEncodingRho::<Ft255, typenum::U37, typenum::U38>::new(coeffs.len());
+        let enc = LigeroEncodingRho::<Ft255, TLo, THi>::new(coeffs.len());
         let comm = LcCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
         let root = comm.get_root();
 

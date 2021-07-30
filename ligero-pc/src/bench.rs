@@ -16,7 +16,9 @@ use lcpc2d::{FieldHash, LcCommit, LcEncoding, SizedField};
 use merlin::Transcript;
 use test::{black_box, Bencher};
 use test_fields::{def_bench, ft127::*, ft255::*, random_coeffs};
-use typenum::Unsigned;
+use typenum::{U39 as TLo, Unsigned};
+
+type THi = <TLo as std::ops::Add<typenum::U1>>::Output;
 
 fn _commit_bench<D, Ft, Rn, Rd>(b: &mut Bencher, log_len: usize)
 where
@@ -46,7 +48,7 @@ where
     D: Digest,
     Ft: FieldFFT + FieldHash + SizedField,
 {
-    _commit_bench::<D, Ft, typenum::U37, typenum::U38>(b, log_len);
+    _commit_bench::<D, Ft, TLo, THi>(b, log_len);
 }
 
 fn _prove_bench<D, Ft, Rn, Rd>(b: &mut Bencher, log_len: usize)
@@ -98,7 +100,7 @@ where
     D: Digest,
     Ft: FieldFFT + FieldHash + SizedField,
 {
-    _prove_bench::<D, Ft, typenum::U37, typenum::U38>(b, log_len);
+    _prove_bench::<D, Ft, TLo, THi>(b, log_len);
 }
 
 fn _verify_bench<D, Ft, Rn, Rd>(b: &mut Bencher, log_len: usize)
@@ -170,7 +172,7 @@ where
     D: Digest,
     Ft: FieldFFT + FieldHash + SizedField,
 {
-    _verify_bench::<D, Ft, typenum::U37, typenum::U38>(b, log_len);
+    _verify_bench::<D, Ft, TLo, THi>(b, log_len);
 }
 
 def_bench!(commit, Ft127, Blake2b, 16);
