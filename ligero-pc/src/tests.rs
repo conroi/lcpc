@@ -40,36 +40,104 @@ fn get_dims() {
     }
 }
 
+use typenum::U39 as TLo;
+type THi = <TLo as std::ops::Add<typenum::U1>>::Output;
+const N_ITERS: usize = 10;
 #[test]
 fn rough_bench() {
     use std::time::Instant;
-    use typenum::U39 as TLo;
-    type THi = <TLo as std::ops::Add<typenum::U1>>::Output;
 
-    for lgl in (9..=29).step_by(2) {
+    for lgl in (13..=29).step_by(2) {
         // commit to random poly of specified size
         let coeffs = random_coeffs(lgl);
         let enc = LigeroEncodingRho::<Ft255, TLo, THi>::new(coeffs.len());
         let mut xxx = 0u8;
-        let n_iters = 10;
 
         let now = Instant::now();
-        for i in 0..n_iters {
+        for i in 0..N_ITERS {
             let comm = LcCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
             let root = comm.get_root();
             xxx ^= root.as_ref()[i];
         }
-        let dur = now.elapsed().as_nanos() / n_iters as u128;
+        let dur = now.elapsed().as_nanos() / N_ITERS as u128;
         println!("{}: {} {:?}", lgl, dur, xxx);
     }
 }
 
 #[test]
-fn proof_sizes() {
-    use typenum::U39 as TLo;
-    type THi = <TLo as std::ops::Add<typenum::U1>>::Output;
+fn prove_verify_size_bench() {
+    use ff::PrimeField;
+    use std::time::Instant;
 
-    for lgl in (8..=22).step_by(2) {
+    for lgl in (13..=29).step_by(2) {
+        // commit to random poly of specified size
+        let coeffs = random_coeffs(lgl);
+        let enc = LigeroEncodingRho::<Ft255, TLo, THi>::new(coeffs.len());
+        let comm = LcCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
+        let root = comm.get_root();
+
+        // evaluate the random polynomial we just generated at a random point x
+        let x = Ft255::random(&mut rand::thread_rng());
+
+        // compute the outer and inner tensors for powers of x
+        // NOTE: we treat coeffs as a univariate polynomial, but it doesn't
+        // really matter --- the only difference from a multilinear is the
+        // way we compute outer_tensor and inner_tensor from the eval point
+        let inner_tensor: Vec<Ft255> = iterate(Ft255::one(), |&v| v * x)
+            .take(comm.get_n_per_row())
+            .collect();
+        let outer_tensor: Vec<Ft255> = {
+            let xr = x * inner_tensor.last().unwrap();
+            iterate(Ft255::one(), |&v| v * xr)
+                .take(comm.get_n_rows())
+                .collect()
+        };
+
+        let mut xxx = 0u8;
+        let now = Instant::now();
+        for i in 0..N_ITERS {
+            let mut tr = Transcript::new(b"test transcript");
+            tr.append_message(b"polycommit", root.as_ref());
+            tr.append_message(b"ncols", &(enc.get_n_col_opens() as u64).to_be_bytes()[..]);
+            let pf = comm.prove(&outer_tensor[..], &enc, &mut tr).unwrap();
+            let encoded: Vec<u8> = bincode::serialize(&pf).unwrap();
+            xxx ^= encoded[i];
+        }
+        let pf_dur = now.elapsed().as_nanos() / N_ITERS as u128;
+
+        let mut tr = Transcript::new(b"test transcript");
+        tr.append_message(b"polycommit", root.as_ref());
+        tr.append_message(b"ncols", &(enc.get_n_col_opens() as u64).to_be_bytes()[..]);
+        let pf = comm.prove(&outer_tensor[..], &enc, &mut tr).unwrap();
+        let encoded: Vec<u8> = bincode::serialize(&pf).unwrap();
+        let len = encoded.len();
+
+        let now = Instant::now();
+        for i in 0..N_ITERS {
+            let mut tr = Transcript::new(b"test transcript");
+            tr.append_message(b"polycommit", root.as_ref());
+            tr.append_message(b"ncols", &(enc.get_n_col_opens() as u64).to_be_bytes()[..]);
+            xxx ^= pf
+                .verify(
+                    root.as_ref(),
+                    &outer_tensor[..],
+                    &inner_tensor[..],
+                    &enc,
+                    &mut tr,
+                )
+                .unwrap()
+                .to_repr()
+                .as_ref()[i];
+        }
+        let vf_dur = now.elapsed().as_nanos() / N_ITERS as u128;
+
+        println!("{}: {} {} {} {}", lgl, pf_dur, vf_dur, len, xxx);
+    }
+}
+
+#[test]
+fn proof_sizes() {
+    for lgl in (13..=29).step_by(2) {
         // Code1 = 80/81
         // Code2 = 54/55
         // Code3 = 39/40

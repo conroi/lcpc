@@ -80,11 +80,14 @@ fn test_matgen_encode() {
     encode(&mut xi, &precodes, &postcodes);
 }
 
+const N_ITERS: usize = 10;
 #[test]
-fn proof_sizes() {
+fn prove_verify_size_bench() {
     use super::codespec::SdigCode3 as TestCode;
+    use ff::PrimeField;
+    use std::time::Instant;
 
-    for lgl in (8..=22).step_by(2) {
+    for lgl in (13..=29).step_by(2) {
         // commit to random poly of specified size
         let coeffs = random_coeffs(lgl);
         let enc = SdigEncodingS::<Ft255, TestCode>::new(coeffs.len(), 0);
@@ -108,14 +111,45 @@ fn proof_sizes() {
                 .collect()
         };
 
-        // compute an evaluation proof
-        let mut tr1 = Transcript::new(b"test transcript");
-        tr1.append_message(b"polycommit", root.as_ref());
-        tr1.append_message(b"ncols", &(enc.get_n_col_opens() as u64).to_be_bytes()[..]);
-        let pf = comm.prove(&outer_tensor[..], &enc, &mut tr1).unwrap();
-        let encoded: Vec<u8> = bincode::serialize(&pf).unwrap();
+        let mut xxx = 0u8;
+        let now = Instant::now();
+        for i in 0..N_ITERS {
+            let mut tr = Transcript::new(b"test transcript");
+            tr.append_message(b"polycommit", root.as_ref());
+            tr.append_message(b"ncols", &(enc.get_n_col_opens() as u64).to_be_bytes()[..]);
+            let pf = comm.prove(&outer_tensor[..], &enc, &mut tr).unwrap();
+            let encoded: Vec<u8> = bincode::serialize(&pf).unwrap();
+            xxx ^= encoded[i];
+        }
+        let pf_dur = now.elapsed().as_nanos() / N_ITERS as u128;
 
-        println!("{}: {}", lgl, encoded.len());
+        let mut tr = Transcript::new(b"test transcript");
+        tr.append_message(b"polycommit", root.as_ref());
+        tr.append_message(b"ncols", &(enc.get_n_col_opens() as u64).to_be_bytes()[..]);
+        let pf = comm.prove(&outer_tensor[..], &enc, &mut tr).unwrap();
+        let encoded: Vec<u8> = bincode::serialize(&pf).unwrap();
+        let len = encoded.len();
+
+        let now = Instant::now();
+        for i in 0..N_ITERS {
+            let mut tr = Transcript::new(b"test transcript");
+            tr.append_message(b"polycommit", root.as_ref());
+            tr.append_message(b"ncols", &(enc.get_n_col_opens() as u64).to_be_bytes()[..]);
+            xxx ^= pf
+                .verify(
+                    root.as_ref(),
+                    &outer_tensor[..],
+                    &inner_tensor[..],
+                    &enc,
+                    &mut tr,
+                )
+                .unwrap()
+                .to_repr()
+                .as_ref()[i];
+        }
+        let vf_dur = now.elapsed().as_nanos() / N_ITERS as u128;
+
+        println!("{}: {} {} {} {}", lgl, pf_dur, vf_dur, len, xxx);
     }
 }
 
@@ -124,20 +158,19 @@ fn rough_bench() {
     use super::codespec::SdigCode3 as TestCode;
     use std::time::Instant;
 
-    for lgl in (9..=29).step_by(2) {
+    for lgl in (13..=29).step_by(2) {
         // commit to random poly of specified size
         let coeffs = random_coeffs(lgl);
         let enc = SdigEncodingS::<Ft255, TestCode>::new(coeffs.len(), 0);
         let mut xxx = 0u8;
-        let n_iters = 10;
 
         let now = Instant::now();
-        for i in 0..n_iters {
+        for i in 0..N_ITERS {
             let comm = LcCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
             let root = comm.get_root();
             xxx ^= root.as_ref()[i];
         }
-        let dur = now.elapsed().as_nanos() / n_iters as u128;
+        let dur = now.elapsed().as_nanos() / N_ITERS as u128;
         println!("{}: {} {:?}", lgl, dur, xxx);
     }
 }
