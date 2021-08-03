@@ -44,6 +44,7 @@ use typenum::U39 as TLo;
 type THi = <TLo as std::ops::Add<typenum::U1>>::Output;
 const N_ITERS: usize = 10;
 #[test]
+#[ignore]
 fn rough_bench() {
     use std::time::Instant;
 
@@ -65,6 +66,7 @@ fn rough_bench() {
 }
 
 #[test]
+#[ignore]
 fn prove_verify_size_bench() {
     use ff::PrimeField;
     use std::time::Instant;
@@ -136,6 +138,7 @@ fn prove_verify_size_bench() {
 }
 
 #[test]
+#[ignore]
 fn proof_sizes() {
     for lgl in (13..=29).step_by(2) {
         // Code1 = 80/81

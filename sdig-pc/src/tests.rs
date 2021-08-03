@@ -82,6 +82,7 @@ fn test_matgen_encode() {
 
 const N_ITERS: usize = 10;
 #[test]
+#[ignore]
 fn prove_verify_size_bench() {
     use super::codespec::SdigCode3 as TestCode;
     use ff::PrimeField;
@@ -154,6 +155,7 @@ fn prove_verify_size_bench() {
 }
 
 #[test]
+#[ignore]
 fn rough_bench() {
     use super::codespec::SdigCode3 as TestCode;
     use std::time::Instant;
