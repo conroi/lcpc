@@ -225,6 +225,57 @@ fn end_to_end_one_proof() {
 }
 
 #[test]
+fn end_to_end_one_proof_ml() {
+    let mut rng = rand::thread_rng();
+
+    // commit to a random polynomial at a random rate
+    let lgl = 12 + rng.gen::<usize>() % 8;
+    let coeffs = random_coeffs(lgl);
+    let enc = SdigEncoding::new_ml(lgl, 0);
+    let comm = SdigCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
+    // this is the polynomial commitment
+    let root = comm.get_root();
+    assert!(comm.get_n_rows() != 1);
+
+    // evaluate the random polynomial we just generated at a random point x
+    let x = Ft63::random(&mut rand::thread_rng());
+
+    // compute the outer and inner tensors for powers of x
+    // NOTE: we treat coeffs as a univariate polynomial, but it doesn't
+    // really matter --- the only difference from a multilinear is the
+    // way we compute outer_tensor and inner_tensor from the eval point
+    let inner_tensor: Vec<Ft63> = iterate(Ft63::one(), |&v| v * x)
+        .take(comm.get_n_per_row())
+        .collect();
+    let outer_tensor: Vec<Ft63> = {
+        let xr = x * inner_tensor.last().unwrap();
+        iterate(Ft63::one(), |&v| v * xr)
+            .take(comm.get_n_rows())
+            .collect()
+    };
+
+    // compute an evaluation proof
+    let mut tr1 = Transcript::new(b"test transcript");
+    tr1.append_message(b"polycommit", root.as_ref());
+    tr1.append_message(b"ncols", &(enc.get_n_col_opens() as u64).to_be_bytes()[..]);
+    let pf = comm.prove(&outer_tensor[..], &enc, &mut tr1).unwrap();
+
+    // verify it and finish evaluation
+    let mut tr2 = Transcript::new(b"test transcript");
+    tr2.append_message(b"polycommit", root.as_ref());
+    tr2.append_message(b"ncols", &(enc.get_n_col_opens() as u64).to_be_bytes()[..]);
+    let enc2 = SdigEncoding::new_from_dims(pf.get_n_per_row(), pf.get_n_cols(), 0);
+    pf.verify(
+        root.as_ref(),
+        &outer_tensor[..],
+        &inner_tensor[..],
+        &enc2,
+        &mut tr2,
+    )
+    .unwrap();
+}
+
+#[test]
 fn end_to_end_two_proofs() {
     // commit to a random polynomial at a random rate
     let coeffs = get_random_coeffs();
