@@ -540,6 +540,8 @@ where
     D: Digest,
     E: LcEncoding,
 {
+    use std::time::Instant;
+
     let (n_rows, n_per_row, n_cols) = enc.get_dims(coeffs_in.len());
 
     // check that parameters are ok
@@ -553,6 +555,7 @@ where
     let mut comm = vec![FldT::<E>::zero(); n_rows * n_cols];
 
     // local copy of coeffs with padding
+    let now = Instant::now();
     coeffs
         .par_chunks_mut(n_per_row)
         .zip(coeffs_in.par_chunks(n_per_row))
@@ -567,8 +570,10 @@ where
             r[..c.len()].copy_from_slice(c);
             enc.encode(r)
         })?;
+    let enc_dur = now.elapsed().as_nanos();
 
     // compute Merkle tree
+    let now = Instant::now();
     let n_cols_np2 = n_cols
         .checked_next_power_of_two()
         .ok_or(ProverError::TooBig)?;
@@ -582,6 +587,8 @@ where
     };
     check_comm(&ret, enc)?;
     merkleize(&mut ret);
+    let hash_dur = now.elapsed().as_nanos();
+    println!("enc: {} hash: {}", enc_dur, hash_dur);
 
     Ok(ret)
 }
