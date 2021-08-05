@@ -229,13 +229,13 @@ fn end_to_end_one_proof_ml() {
     let mut rng = rand::thread_rng();
 
     // commit to a random polynomial at a random rate
-    let lgl = 12 + rng.gen::<usize>() % 8;
+    let lgl = 5 + rng.gen::<usize>() % 16;
     let coeffs = random_coeffs(lgl);
     let enc = SdigEncoding::new_ml(lgl, 0);
     let comm = SdigCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root();
-    assert!(comm.get_n_rows() != 1);
+    assert_eq!(1 << lgl, comm.get_n_rows() * comm.get_n_per_row());
 
     // evaluate the random polynomial we just generated at a random point x
     let x = Ft63::random(&mut rand::thread_rng());

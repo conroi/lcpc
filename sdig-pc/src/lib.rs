@@ -67,6 +67,9 @@ where
 
     // shared between new and new_ml
     fn _new_from_np1(len: usize, np1: usize, seed: u64) -> Self {
+        // n_per_row can't be greater than length!
+        let np1 = if np1 > len { len } else { np1 };
+
         let n_col_opens = Self::_n_col_opens();
         let nr1 = (len + np1 - 1) / np1;
         let nd1 = Self::_n_degree_tests(np1 * 2); // approximately
