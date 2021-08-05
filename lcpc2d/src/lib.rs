@@ -588,7 +588,7 @@ where
     check_comm(&ret, enc)?;
     merkleize(&mut ret);
     let hash_dur = now.elapsed().as_nanos();
-    println!("enc: {} hash: {}", enc_dur, hash_dur);
+    println!("comm enc,hash: {} {}", enc_dur, hash_dur);
 
     Ok(ret)
 }
@@ -764,6 +764,8 @@ where
     D: Digest,
     E: LcEncoding,
 {
+    use std::time::Instant;
+
     // make sure arguments are well formed
     let n_col_opens = enc.get_n_col_opens();
     if n_col_opens != proof.columns.len() || n_col_opens == 0 {
@@ -782,6 +784,7 @@ where
         return Err(VerifierError::EncodingDims);
     }
 
+    let now = Instant::now();
     // step 1: random tensor for degree test and random columns to test
     // step 1a: extract random tensor from transcript
     // we run multiple instances of this to boost soundness
@@ -841,7 +844,9 @@ where
         enc.encode(&mut tmp)?;
         tmp
     };
+    let enc_dur = now.elapsed().as_nanos();
 
+    let now = Instant::now();
     // step 3: check p_random, p_eval, and col paths
     cols_to_open
         .par_iter()
@@ -865,6 +870,8 @@ where
                 _ => Ok(()),
             }
         })?;
+    let hash_dur = now.elapsed().as_nanos();
+    println!("ver enc,hash: {} {}", enc_dur, hash_dur);
 
     // step 4: evaluate and return
     Ok(inner_tensor
