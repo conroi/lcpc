@@ -22,6 +22,18 @@ use std::iter::repeat_with;
 use test_fields::{ft255::*, ft63::*, random_coeffs};
 
 #[test]
+fn col_opens() {
+    use super::codespec::{SdigCode1, SdigCode2, SdigCode3, SdigCode4, SdigCode5, SdigCode6};
+
+    println!("1: {}", SdigEncodingS::<Ft255, SdigCode1>::_n_col_opens());
+    println!("2: {}", SdigEncodingS::<Ft255, SdigCode2>::_n_col_opens());
+    println!("3: {}", SdigEncodingS::<Ft255, SdigCode3>::_n_col_opens());
+    println!("4: {}", SdigEncodingS::<Ft255, SdigCode4>::_n_col_opens());
+    println!("5: {}", SdigEncodingS::<Ft255, SdigCode5>::_n_col_opens());
+    println!("6: {}", SdigEncodingS::<Ft255, SdigCode6>::_n_col_opens());
+}
+
+#[test]
 fn sprs_playground() {
     let mut rng = thread_rng();
     let n_rows = 65537;

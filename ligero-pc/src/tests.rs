@@ -40,6 +40,22 @@ fn get_dims() {
     }
 }
 
+#[test]
+fn col_opens() {
+    println!(
+        "39/40: {}",
+        LigeroEncodingRho::<Ft255, typenum::U39, typenum::U40>::_n_col_opens()
+    );
+    println!(
+        "1/2: {}",
+        LigeroEncodingRho::<Ft255, typenum::U1, typenum::U2>::_n_col_opens()
+    );
+    println!(
+        "1/4: {}",
+        LigeroEncodingRho::<Ft255, typenum::U1, typenum::U4>::_n_col_opens()
+    );
+}
+
 use typenum::U39 as TLo;
 type THi = <TLo as std::ops::Add<typenum::U1>>::Output;
 const N_ITERS: usize = 10;
