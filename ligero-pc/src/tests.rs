@@ -56,8 +56,24 @@ fn col_opens() {
     );
 }
 
-use typenum::U39 as TLo;
-type THi = <TLo as std::ops::Add<typenum::U1>>::Output;
+#[cfg(feature="isz")]
+use typenum::U38 as TLo;
+#[cfg(not(feature="isz"))]
+use typenum::U1 as TLo;
+
+#[cfg(feature="isz")]
+use typenum::U39 as THi;
+#[cfg(all(not(feature="isz"), feature="hlf"))]
+use typenum::U2 as THi;
+#[cfg(all(not(feature="isz"),not(feature="hlf")))]
+use typenum::U4 as THi;
+
+#[test]
+fn rate() {
+    use typenum::Unsigned;
+    println!("{} {}", TLo::to_usize(), THi::to_usize());
+}
+
 const N_ITERS: usize = 10;
 #[test]
 #[ignore]

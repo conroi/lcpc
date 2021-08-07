@@ -27,3 +27,5 @@ test-fields = { path = "../test-fields" }
 
 [features]
 bench = []
+isz = []
+hlf = []
