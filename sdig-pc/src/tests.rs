@@ -9,7 +9,7 @@
 
 use super::{SdigCommit, SdigEncoding, SdigEncodingS};
 
-use blake2::Blake2b;
+use blake3::Hasher as Blake3;
 use ff::Field;
 use itertools::iterate;
 use lcpc2d::{LcCommit, LcEncoding};
@@ -104,7 +104,7 @@ fn prove_verify_size_bench() {
         // commit to random poly of specified size
         let coeffs = random_coeffs(lgl);
         let enc = SdigEncodingS::<Ft255, TestCode>::new(coeffs.len(), 0);
-        let comm = LcCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
+        let comm = LcCommit::<Blake3, _>::commit(&coeffs, &enc).unwrap();
         let root = comm.get_root();
 
         // evaluate the random polynomial we just generated at a random point x
@@ -180,7 +180,7 @@ fn rough_bench() {
 
         let now = Instant::now();
         for i in 0..N_ITERS {
-            let comm = LcCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
+            let comm = LcCommit::<Blake3, _>::commit(&coeffs, &enc).unwrap();
             let root = comm.get_root();
             xxx ^= root.as_ref()[i];
         }
@@ -194,7 +194,7 @@ fn end_to_end_one_proof() {
     // commit to a random polynomial at a random rate
     let coeffs = get_random_coeffs();
     let enc = SdigEncoding::new(coeffs.len(), 0);
-    let comm = SdigCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
+    let comm = SdigCommit::<Blake3, _>::commit(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root();
 
@@ -244,7 +244,7 @@ fn end_to_end_one_proof_ml() {
     let lgl = 5 + rng.gen::<usize>() % 16;
     let coeffs = random_coeffs(lgl);
     let enc = SdigEncoding::new_ml(lgl, 0);
-    let comm = SdigCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
+    let comm = SdigCommit::<Blake3, _>::commit(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root();
     assert_eq!(1 << lgl, comm.get_n_rows() * comm.get_n_per_row());
@@ -292,7 +292,7 @@ fn end_to_end_two_proofs() {
     // commit to a random polynomial at a random rate
     let coeffs = get_random_coeffs();
     let enc = SdigEncoding::new(coeffs.len(), 1);
-    let comm = SdigCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
+    let comm = SdigCommit::<Blake3, _>::commit(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root();
 

@@ -16,7 +16,7 @@ typenum = "1.13"
 
 [dev-dependencies]
 bincode = "1.3"
-blake2 = "0.9"
+blake3 = { version = "1", features = ["traits-preview"] }
 ff = "0.10"
 itertools = "0.10"
 merlin = "2.0"

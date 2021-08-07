@@ -22,7 +22,7 @@ serde_bytes = "0.11"
 
 [dev-dependencies]
 bincode = "1.3"
-blake2 = "0.9"
+blake3 = { version = "1", features = ["traits-preview"] }
 fffft = "0.4"
 itertools = "0.10"
 test-fields = { path = "../test-fields" }

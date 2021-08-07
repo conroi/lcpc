@@ -9,7 +9,7 @@
 
 use super::{LigeroCommit, LigeroEncoding, LigeroEncodingRho};
 
-use blake2::Blake2b;
+use blake3::Hasher as Blake3;
 use ff::Field;
 use itertools::iterate;
 use lcpc2d::{LcCommit, LcEncoding};
@@ -72,7 +72,7 @@ fn rough_bench() {
 
         let now = Instant::now();
         for i in 0..N_ITERS {
-            let comm = LcCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
+            let comm = LcCommit::<Blake3, _>::commit(&coeffs, &enc).unwrap();
             let root = comm.get_root();
             xxx ^= root.as_ref()[i];
         }
@@ -91,7 +91,7 @@ fn prove_verify_size_bench() {
         // commit to random poly of specified size
         let coeffs = random_coeffs(lgl);
         let enc = LigeroEncodingRho::<Ft255, TLo, THi>::new(coeffs.len());
-        let comm = LcCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
+        let comm = LcCommit::<Blake3, _>::commit(&coeffs, &enc).unwrap();
         let root = comm.get_root();
 
         // evaluate the random polynomial we just generated at a random point x
@@ -166,7 +166,7 @@ fn proof_sizes() {
         // commit to random poly of specified size
         let coeffs = random_coeffs(lgl);
         let enc = LigeroEncodingRho::<Ft255, TLo, THi>::new(coeffs.len());
-        let comm = LcCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
+        let comm = LcCommit::<Blake3, _>::commit(&coeffs, &enc).unwrap();
         let root = comm.get_root();
 
         // evaluate the random polynomial we just generated at a random point x
@@ -202,7 +202,7 @@ fn end_to_end() {
     // commit to a random polynomial at a random rate
     let coeffs = get_random_coeffs();
     let enc = LigeroEncoding::new(coeffs.len());
-    let comm = LigeroCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
+    let comm = LigeroCommit::<Blake3, _>::commit(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root();
 
@@ -252,7 +252,7 @@ fn end_to_end_one_proof_ml() {
     let lgl = 12 + rng.gen::<usize>() % 8;
     let coeffs = random_coeffs(lgl);
     let enc = LigeroEncoding::new_ml(lgl);
-    let comm = LigeroCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
+    let comm = LigeroCommit::<Blake3, _>::commit(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root();
     assert!(comm.get_n_rows() != 1);
@@ -300,7 +300,7 @@ fn end_to_end_two_proofs() {
     // commit to a random polynomial at a random rate
     let coeffs = get_random_coeffs();
     let enc = LigeroEncoding::new(coeffs.len());
-    let comm = LigeroCommit::<Blake2b, _>::commit(&coeffs, &enc).unwrap();
+    let comm = LigeroCommit::<Blake3, _>::commit(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root();
 

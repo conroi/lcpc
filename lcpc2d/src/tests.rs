@@ -9,7 +9,7 @@
 
 use super::{def_labels, FieldHash, LcCommit, LcEncoding, LcEvalProof, LcRoot};
 
-use blake2::Blake2b;
+use blake3::Hasher as Blake3;
 use digest::Output;
 use ff::Field;
 use fffft::{FFTError, FFTPrecomp, FieldFFT};
@@ -180,7 +180,7 @@ fn open_column() {
     for _ in 0..64 {
         let col_num = rng.gen::<usize>() % test_comm.n_cols;
         let column = open_column(&test_comm, col_num).unwrap();
-        assert!(verify_column::<Blake2b, _>(
+        assert!(verify_column::<Blake3, _>(
             &column,
             col_num,
             root.as_ref(),
@@ -196,7 +196,7 @@ fn commit() {
 
     let (coeffs, rho) = random_coeffs_rho();
     let enc = LigeroEncoding::<Ft63>::new(coeffs.len(), rho);
-    let comm = commit::<Blake2b, LigeroEncoding<_>>(&coeffs, &enc).unwrap();
+    let comm = commit::<Blake3, LigeroEncoding<_>>(&coeffs, &enc).unwrap();
 
     let x = Ft63::random(&mut rand::thread_rng());
 
@@ -242,7 +242,7 @@ fn end_to_end() {
     // commit to a random polynomial at a random rate
     let (coeffs, rho) = random_coeffs_rho();
     let enc = LigeroEncoding::<Ft63>::new(coeffs.len(), rho);
-    let comm = commit::<Blake2b, LigeroEncoding<_>>(&coeffs, &enc).unwrap();
+    let comm = commit::<Blake3, LigeroEncoding<_>>(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root();
 
@@ -273,10 +273,10 @@ fn end_to_end() {
     tr1.append_message(b"polycommit", root.as_ref());
     tr1.append_message(b"rate", &rho.to_be_bytes()[..]);
     tr1.append_message(b"ncols", &(N_COL_OPENS as u64).to_be_bytes()[..]);
-    let pf: LigeroEvalProof<Blake2b, Ft63> =
+    let pf: LigeroEvalProof<Blake3, Ft63> =
         prove(&comm, &outer_tensor[..], &enc, &mut tr1).unwrap();
     let encoded: Vec<u8> = bincode::serialize(&pf).unwrap();
-    let encroot: Vec<u8> = bincode::serialize(&LcRoot::<Blake2b, LigeroEncoding<Ft63>> {
+    let encroot: Vec<u8> = bincode::serialize(&LcRoot::<Blake3, LigeroEncoding<Ft63>> {
         root: *root.as_ref(),
         _p: Default::default(),
     })
@@ -299,8 +299,8 @@ fn end_to_end() {
     .unwrap();
 
     let root2 =
-        bincode::deserialize::<LcRoot<Blake2b, LigeroEncoding<Ft63>>>(&encroot[..]).unwrap();
-    let pf2: LigeroEvalProof<Blake2b, Ft63> = bincode::deserialize(&encoded[..]).unwrap();
+        bincode::deserialize::<LcRoot<Blake3, LigeroEncoding<Ft63>>>(&encroot[..]).unwrap();
+    let pf2: LigeroEvalProof<Blake3, Ft63> = bincode::deserialize(&encoded[..]).unwrap();
     let mut tr3 = Transcript::new(b"test transcript");
     tr3.append_message(b"polycommit", root.as_ref());
     tr3.append_message(b"rate", &rho.to_be_bytes()[..]);
@@ -327,7 +327,7 @@ fn end_to_end_two_proofs() {
     // commit to a random polynomial at a random rate
     let (coeffs, rho) = random_coeffs_rho();
     let enc = LigeroEncoding::<Ft63>::new(coeffs.len(), rho);
-    let comm = commit::<Blake2b, LigeroEncoding<_>>(&coeffs, &enc).unwrap();
+    let comm = commit::<Blake3, LigeroEncoding<_>>(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root();
 
@@ -358,7 +358,7 @@ fn end_to_end_two_proofs() {
     tr1.append_message(b"polycommit", root.as_ref());
     tr1.append_message(b"rate", &rho.to_be_bytes()[..]);
     tr1.append_message(b"ncols", &(N_COL_OPENS as u64).to_be_bytes()[..]);
-    let pf = prove::<Blake2b, _>(&comm, &outer_tensor[..], &enc, &mut tr1).unwrap();
+    let pf = prove::<Blake3, _>(&comm, &outer_tensor[..], &enc, &mut tr1).unwrap();
 
     let challenge_after_first_proof_prover = {
         let mut key: <ChaCha20Rng as SeedableRng>::Seed = Default::default();
@@ -371,7 +371,7 @@ fn end_to_end_two_proofs() {
     tr1.append_message(b"polycommit", root.as_ref());
     tr1.append_message(b"rate", &rho.to_be_bytes()[..]);
     tr1.append_message(b"ncols", &(N_COL_OPENS as u64).to_be_bytes()[..]);
-    let pf2 = prove::<Blake2b, _>(&comm, &outer_tensor[..], &enc, &mut tr1).unwrap();
+    let pf2 = prove::<Blake3, _>(&comm, &outer_tensor[..], &enc, &mut tr1).unwrap();
 
     // verify it and finish evaluation
     let mut tr2 = Transcript::new(b"test transcript");
@@ -432,7 +432,7 @@ fn random_coeffs_rho() -> (Vec<Ft63>, f64) {
     )
 }
 
-fn random_comm() -> LigeroCommit<Blake2b, Ft63> {
+fn random_comm() -> LigeroCommit<Blake3, Ft63> {
     let mut rng = rand::thread_rng();
 
     let lgl = 8 + rng.gen::<usize>() % 8;
@@ -455,12 +455,12 @@ fn random_comm() -> LigeroCommit<Blake2b, Ft63> {
         .take(comm_len)
         .collect();
 
-    LigeroCommit::<Blake2b, Ft63> {
+    LigeroCommit::<Blake3, Ft63> {
         comm,
         coeffs,
         n_rows,
         n_cols,
         n_per_row,
-        hashes: vec![<Output<Blake2b> as Default>::default(); 2 * n_cols - 1],
+        hashes: vec![<Output<Blake3> as Default>::default(); 2 * n_cols - 1],
     }
 }

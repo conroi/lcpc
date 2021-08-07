@@ -9,7 +9,7 @@
 
 use super::LigeroEncodingRho;
 
-use blake2::{Blake2b, Digest};
+use blake3::{Hasher as Blake3, traits::digest::Digest};
 use fffft::FieldFFT;
 use itertools::iterate;
 use lcpc2d::{FieldHash, LcCommit, LcEncoding, SizedField};
@@ -175,38 +175,38 @@ where
     _verify_bench::<D, Ft, TLo, THi>(b, log_len);
 }
 
-def_bench!(commit, Ft127, Blake2b, 16);
-def_bench!(commit, Ft127, Blake2b, 20);
-def_bench!(commit, Ft127, Blake2b, 24);
+def_bench!(commit, Ft127, Blake3, 16);
+def_bench!(commit, Ft127, Blake3, 20);
+def_bench!(commit, Ft127, Blake3, 24);
 
-def_bench!(prove, Ft127, Blake2b, 16);
-def_bench!(prove, Ft127, Blake2b, 20);
-def_bench!(prove, Ft127, Blake2b, 24);
+def_bench!(prove, Ft127, Blake3, 16);
+def_bench!(prove, Ft127, Blake3, 20);
+def_bench!(prove, Ft127, Blake3, 24);
 
-def_bench!(verify, Ft127, Blake2b, 16);
-def_bench!(verify, Ft127, Blake2b, 20);
-def_bench!(verify, Ft127, Blake2b, 24);
+def_bench!(verify, Ft127, Blake3, 16);
+def_bench!(verify, Ft127, Blake3, 20);
+def_bench!(verify, Ft127, Blake3, 24);
 
-def_bench!(commit, Ft255, Blake2b, 16);
-def_bench!(commit, Ft255, Blake2b, 20);
-def_bench!(commit, Ft255, Blake2b, 24);
+def_bench!(commit, Ft255, Blake3, 16);
+def_bench!(commit, Ft255, Blake3, 20);
+def_bench!(commit, Ft255, Blake3, 24);
 
-def_bench!(prove, Ft255, Blake2b, 16);
-def_bench!(prove, Ft255, Blake2b, 20);
-def_bench!(prove, Ft255, Blake2b, 24);
+def_bench!(prove, Ft255, Blake3, 16);
+def_bench!(prove, Ft255, Blake3, 20);
+def_bench!(prove, Ft255, Blake3, 24);
 
-def_bench!(verify, Ft255, Blake2b, 16);
-def_bench!(verify, Ft255, Blake2b, 20);
-def_bench!(verify, Ft255, Blake2b, 24);
+def_bench!(verify, Ft255, Blake3, 16);
+def_bench!(verify, Ft255, Blake3, 20);
+def_bench!(verify, Ft255, Blake3, 24);
 
-def_bench!(commit_isz, Ft255, Blake2b, 16);
-def_bench!(commit_isz, Ft255, Blake2b, 20);
-def_bench!(commit_isz, Ft255, Blake2b, 24);
+def_bench!(commit_isz, Ft255, Blake3, 16);
+def_bench!(commit_isz, Ft255, Blake3, 20);
+def_bench!(commit_isz, Ft255, Blake3, 24);
 
-def_bench!(prove_isz, Ft255, Blake2b, 16);
-def_bench!(prove_isz, Ft255, Blake2b, 20);
-def_bench!(prove_isz, Ft255, Blake2b, 24);
+def_bench!(prove_isz, Ft255, Blake3, 16);
+def_bench!(prove_isz, Ft255, Blake3, 20);
+def_bench!(prove_isz, Ft255, Blake3, 24);
 
-def_bench!(verify_isz, Ft255, Blake2b, 16);
-def_bench!(verify_isz, Ft255, Blake2b, 20);
-def_bench!(verify_isz, Ft255, Blake2b, 24);
+def_bench!(verify_isz, Ft255, Blake3, 16);
+def_bench!(verify_isz, Ft255, Blake3, 20);
+def_bench!(verify_isz, Ft255, Blake3, 24);
