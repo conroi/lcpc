@@ -1,0 +1,162 @@
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded lazy_static v1.4.0
+  Downloaded num_cpus v1.13.0
+  Downloaded generic-array v0.14.4
+  Downloaded rayon v1.5.1
+  Downloaded subtle v2.4.1
+  Downloaded crossbeam-epoch v0.9.5
+  Downloaded crossbeam-deque v0.8.1
+  Downloaded getrandom v0.1.16
+  Downloaded ff v0.10.0
+  Downloaded num-bigint v0.3.2
+  Downloaded rayon-core v1.9.1
+  Downloaded rand_core v0.5.1
+  Downloaded proc-macro-error-attr v1.0.4
+  Downloaded radium v0.6.2
+  Downloaded proc-macro-error v1.0.4
+  Downloaded merlin v2.0.1
+  Downloaded itertools v0.10.1
+  Downloaded ff_derive v0.10.0
+  Downloaded cfg-if v1.0.0
+  Downloaded memoffset v0.6.4
+  Downloaded serde_derive v1.0.127
+  Downloaded scopeguard v1.1.0
+  Downloaded unicode-xid v0.2.2
+  Downloaded rand v0.8.4
+  Downloaded syn v1.0.74
+  Downloaded libc v0.2.98
+  Downloaded typenum v1.13.0
+  Downloaded zeroize_derive v1.1.0
+  Downloaded synstructure v0.12.5
+  Downloaded blake3 v1.0.0
+  Downloaded crossbeam-channel v0.5.1
+  Downloaded version_check v0.9.3
+  Downloaded zeroize v1.4.1
+  Downloaded wyz v0.4.0
+  Downloaded tap v1.0.1
+  Downloaded cc v1.0.69
+  Downloaded autocfg v1.0.1
+  Downloaded digest v0.9.0
+  Downloaded quote v1.0.9
+  Downloaded ppv-lite86 v0.2.10
+  Downloaded num-traits v0.2.14
+  Downloaded serde v1.0.127
+  Downloaded rand_core v0.6.3
+  Downloaded crossbeam-utils v0.8.5
+  Downloaded rand_chacha v0.3.1
+  Downloaded num-integer v0.1.44
+  Downloaded getrandom v0.2.3
+  Downloaded paste v1.0.5
+  Downloaded rustversion v1.0.5
+  Downloaded bitvec v0.22.3
+  Downloaded proc-macro2 v1.0.28
+  Downloaded serde_bytes v0.11.5
+  Downloaded fffft v0.4.0
+  Downloaded addchain v0.2.0
+  Downloaded either v1.6.1
+  Downloaded byteorder v1.4.3
+  Downloaded err-derive v0.2.4
+  Downloaded funty v1.2.0
+  Downloaded constant_time_eq v0.1.5
+  Downloaded arrayvec v0.7.1
+  Downloaded bincode v1.3.3
+  Downloaded arrayref v0.3.6
+  Downloaded keccak v0.1.0
+  Downloaded crypto-mac v0.11.1
+  Downloaded ff-derive-num v0.1.2
+   Compiling autocfg v1.0.1
+   Compiling proc-macro2 v1.0.28
+   Compiling unicode-xid v0.2.2
+   Compiling cfg-if v1.0.0
+   Compiling syn v1.0.74
+   Compiling libc v0.2.98
+   Compiling version_check v0.9.3
+   Compiling crossbeam-utils v0.8.5
+   Compiling lazy_static v1.4.0
+   Compiling typenum v1.13.0
+   Compiling serde_derive v1.0.127
+   Compiling crossbeam-epoch v0.9.5
+   Compiling rustversion v1.0.5
+   Compiling radium v0.6.2
+   Compiling rayon-core v1.9.1
+   Compiling tap v1.0.1
+   Compiling serde v1.0.127
+   Compiling subtle v2.4.1
+   Compiling scopeguard v1.1.0
+   Compiling funty v1.2.0
+   Compiling byteorder v1.4.3
+   Compiling getrandom v0.1.16
+   Compiling either v1.6.1
+   Compiling ppv-lite86 v0.2.10
+   Compiling cc v1.0.69
+   Compiling keccak v0.1.0
+   Compiling constant_time_eq v0.1.5
+   Compiling arrayref v0.3.6
+   Compiling arrayvec v0.7.1
+   Compiling paste v1.0.5
+   Compiling wyz v0.4.0
+   Compiling itertools v0.10.1
+   Compiling num-traits v0.2.14
+   Compiling num-integer v0.1.44
+   Compiling num-bigint v0.3.2
+   Compiling memoffset v0.6.4
+   Compiling rayon v1.5.1
+   Compiling proc-macro-error-attr v1.0.4
+   Compiling generic-array v0.14.4
+   Compiling proc-macro-error v1.0.4
+   Compiling blake3 v1.0.0
+   Compiling bitvec v0.22.3
+   Compiling crossbeam-channel v0.5.1
+   Compiling quote v1.0.9
+   Compiling crossbeam-deque v0.8.1
+   Compiling err-derive v0.2.4
+   Compiling getrandom v0.2.3
+   Compiling num_cpus v1.13.0
+   Compiling rand_core v0.6.3
+   Compiling rand_core v0.5.1
+   Compiling rand_chacha v0.3.1
+   Compiling digest v0.9.0
+   Compiling crypto-mac v0.11.1
+   Compiling rand v0.8.4
+   Compiling addchain v0.2.0
+   Compiling synstructure v0.12.5
+   Compiling ff_derive v0.10.0
+   Compiling zeroize_derive v1.1.0
+   Compiling ff-derive-num v0.1.2
+   Compiling zeroize v1.4.1
+   Compiling merlin v2.0.1
+   Compiling ff v0.10.0
+   Compiling fffft v0.4.0
+   Compiling serde_bytes v0.11.5
+   Compiling bincode v1.3.3
+   Compiling test-fields v0.1.0 (/home/kwantam/git/github.com/lcpc/test-fields)
+   Compiling lcpc2d v0.1.0 (/home/kwantam/git/github.com/lcpc/lcpc2d)
+   Compiling ligero-pc v0.1.0 (/home/kwantam/git/github.com/lcpc/ligero-pc)
+    Finished release [optimized] target(s) in 43.98s
+     Running unittests (/home/kwantam/git/github.com/lcpc/target/release/deps/ligero_pc-7f28e79553183d13)
+
+running 1 test
+................................................................
+13: 13591028 84
+................................................................
+15: 15077092 135
+................................................................
+17: 34322354 178
+................................................................
+19: 92586804 78
+................................................................
+21: 253772585 167
+................................................................
+23: 469887785 248
+................................................................
+25: 2083772214 173
+................................................................
+test tests::rough_bench has been running for over 60 seconds
+27: 7528335169 166
+................................................................
+29: 28241325982 84
+test tests::rough_bench ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 414.13s
+

@@ -1,0 +1,58 @@
+ Downloading crates ...
+  Downloaded rawpointer v0.2.1
+  Downloaded alga v0.9.3
+  Downloaded matrixmultiply v0.2.4
+  Downloaded smallvec v1.6.1
+  Downloaded libm v0.2.1
+  Downloaded num-complex v0.3.1
+  Downloaded num-complex v0.2.4
+  Downloaded ndarray v0.14.0
+  Downloaded sprs v0.10.0
+  Downloaded approx v0.3.2
+   Compiling libm v0.2.1
+   Compiling rawpointer v0.2.1
+   Compiling ndarray v0.14.0
+   Compiling smallvec v1.6.1
+   Compiling num-traits v0.2.14
+   Compiling num-complex v0.2.4
+   Compiling num-integer v0.1.44
+   Compiling matrixmultiply v0.2.4
+   Compiling approx v0.3.2
+   Compiling num-complex v0.3.1
+   Compiling ff-derive-num v0.1.2
+   Compiling num-bigint v0.3.2
+   Compiling alga v0.9.3
+   Compiling addchain v0.2.0
+   Compiling ff_derive v0.10.0
+   Compiling sprs v0.10.0
+   Compiling ff v0.10.0
+   Compiling lcpc2d v0.1.0 (/home/kwantam/git/github.com/lcpc/lcpc2d)
+   Compiling test-fields v0.1.0 (/home/kwantam/git/github.com/lcpc/test-fields)
+   Compiling sdig-pc v0.1.0 (/home/kwantam/git/github.com/lcpc/sdig-pc)
+    Finished release [optimized] target(s) in 20.20s
+     Running unittests (/home/kwantam/git/github.com/lcpc/target/release/deps/sdig_pc-f8bcf0a74b8123d1)
+
+running 1 test
+................................................................
+13: 11823575 110
+................................................................
+15: 18173418 194
+................................................................
+17: 24324348 250
+................................................................
+19: 73817503 105
+................................................................
+21: 234402678 194
+................................................................
+23: 682044183 197
+................................................................
+25: 2243153081 45
+................................................................
+test tests::rough_bench has been running for over 60 seconds
+27: 10689307231 8
+................................................................
+29: 38837187085 167
+test tests::rough_bench ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 557.54s
+
