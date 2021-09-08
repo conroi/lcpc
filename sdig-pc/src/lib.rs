@@ -176,7 +176,7 @@ where
 }
 
 /// default encoding
-type SdigEncoding<F> = SdigEncodingS<F, SdigCodeDflt>;
+pub type SdigEncoding<F> = SdigEncodingS<F, SdigCodeDflt>;
 
 /// SDIG expander-based polynomial commitment
 pub type SdigCommit<D, F> = LcCommit<D, SdigEncoding<F>>;
