@@ -183,6 +183,90 @@ where
     hashes: Vec<Output<D>>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct WrappedLcCommit<F>
+where
+    F: Serialize,
+{
+    comm: Vec<F>,
+    coeffs: Vec<F>,
+    n_rows: usize,
+    n_cols: usize,
+    n_per_row: usize,
+    hashes: Vec<WrappedOutput>,
+}
+
+impl<F> WrappedLcCommit<F>
+where
+    F: Serialize,
+{
+    /// turn a WrappedLcCommit into an LcCommit
+    fn unwrap<D, E>(self) -> LcCommit<D, E>
+    where
+        D: Digest,
+        E: LcEncoding<F = F>,
+    {
+        let hashes = self.hashes.into_iter().map(|c| c.unwrap::<D, E>().root).collect();
+
+        LcCommit {
+            comm: self.comm,
+            coeffs: self.coeffs,
+            n_rows: self.n_rows,
+            n_cols: self.n_cols,
+            n_per_row: self.n_per_row,
+            hashes,
+        }
+    }
+}
+
+impl<D, E> LcCommit<D, E>
+where
+    D: Digest,
+    E: LcEncoding,
+    E::F: Serialize,
+{
+    fn wrapped(&self) -> WrappedLcCommit<FldT<E>> {
+        let hashes_wrapped = self.hashes.iter().map(|h| WrappedOutput { bytes: h.to_vec() }).collect();
+
+        WrappedLcCommit {
+            comm: self.comm.clone(),
+            coeffs: self.coeffs.clone(),
+            n_rows: self.n_rows,
+            n_cols: self.n_cols,
+            n_per_row: self.n_per_row,
+            hashes: hashes_wrapped,
+        }
+    }
+}
+
+impl<D, E> Serialize for LcCommit<D, E>
+where
+    D: Digest,
+    E: LcEncoding,
+    E::F: Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.wrapped().serialize(serializer)
+    }
+}
+
+impl<'de, D, E> Deserialize<'de> for LcCommit<D, E>
+where
+    D: Digest,
+    E: LcEncoding,
+    E::F: Serialize + Deserialize<'de>,
+{
+    fn deserialize<De>(deserializer: De) -> Result<Self, De::Error>
+    where
+        De: Deserializer<'de>,
+    {
+        Ok(WrappedLcCommit::<FldT<E>>::deserialize(deserializer)?.unwrap())
+    }
+}
+
 impl<D, E> LcCommit<D, E>
 where
     D: Digest,
