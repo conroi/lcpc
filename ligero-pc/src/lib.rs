@@ -20,7 +20,7 @@ use fffft::{FFTError, FFTPrecomp, FieldFFT};
 use lcpc2d::{
     def_labels, n_degree_tests, FieldHash, LcCommit, LcEncoding, LcEvalProof, SizedField,
 };
-use typenum::{Unsigned, U1, U4};
+use typenum::{Unsigned, U1, U2};
 
 #[cfg(all(test, feature = "bench"))]
 mod bench;
@@ -186,7 +186,7 @@ where
 }
 
 /// Ligero-based polynomial commitment, fixing Rho and Lambda
-pub type LigeroEncoding<F> = LigeroEncodingRho<F, U1, U4>;
+pub type LigeroEncoding<F> = LigeroEncodingRho<F, U1, U2>;
 
 /// Ligero-based polynomial commitment
 pub type LigeroCommit<D, F> = LcCommit<D, LigeroEncoding<F>>;
