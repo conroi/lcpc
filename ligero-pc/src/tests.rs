@@ -11,6 +11,7 @@ use super::{LigeroCommit, LigeroEncoding, LigeroEncodingRho};
 
 use blake3::Hasher as Blake3;
 use ff::Field;
+use flate2::{Compression, write::ZlibEncoder};
 use itertools::iterate;
 use lcpc2d::{LcCommit, LcEncoding};
 use merlin::Transcript;
@@ -143,7 +144,10 @@ fn prove_verify_size_bench() {
         tr.append_message(b"polycommit", root.as_ref());
         tr.append_message(b"ncols", &(enc.get_n_col_opens() as u64).to_be_bytes()[..]);
         let pf = comm.prove(&outer_tensor[..], &enc, &mut tr).unwrap();
-        let encoded: Vec<u8> = bincode::serialize(&pf).unwrap();
+
+        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+        bincode::serialize_into(&mut encoder, &pf).unwrap();
+        let encoded = encoder.finish().unwrap();
         let len = encoded.len();
 
         let now = Instant::now();
