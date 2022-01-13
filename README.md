@@ -2,15 +2,21 @@
 
 Polynomial commitment scheme from any linear code with sufficient minimum distance.
 
+https://eprint.iacr.org/2021/1043
+
 # repo layout
+
+- `doc` - misc documentation
 
 - `lcpc2d` - "2-dimensional" polynomial commitment parameterized by a linear code
 
 - `ligero-pc` - an R-S--based encoding for use with `lcpc2d`
 
+- `scripts` - miscellaneous
+
 - `sdig-pc` - an expander-based encoding for use with `lcpc2d`
 
-- `doc` - misc documentation
+- `test-fields` - field definitions and misc for testing / benching
 
 ## license
 
