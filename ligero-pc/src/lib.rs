@@ -1,4 +1,4 @@
-// Copyright 2020 Riad S. Wahby <rsw@cs.stanford.edu>
+// Copyright 2021 Riad S. Wahby <rsw@cs.stanford.edu>
 //
 // This file is part of ligero-pc, which is part of lcpc.
 //

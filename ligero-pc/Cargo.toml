@@ -5,7 +5,7 @@ authors = ["kwantam <kwantam@gmail.com>"]
 edition = "2018"
 description = "polynomial commitment scheme from R-S codes, as in Ligero (CCS '17)"
 license = "Apache-2.0"
-repository = "https://github.com/kwantam/lcpc"
+repository = "https://github.com/conroi/lcpc"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

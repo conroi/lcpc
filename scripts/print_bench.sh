@@ -1,4 +1,5 @@
 #!/bin/sh
+# (C) 2021 lcpc authors
 
 set -u
 
