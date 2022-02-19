@@ -8,15 +8,15 @@ https://eprint.iacr.org/2021/1043
 
 - `doc` - misc documentation
 
-- `lcpc2d` - "2-dimensional" polynomial commitment parameterized by a linear code
+- `lcpc-2d` - "2-dimensional" polynomial commitment parameterized by a linear code
 
-- `ligero-pc` - an R-S--based encoding for use with `lcpc2d`
+- `lcpc-brakedown-pc` - an expander-based encoding for use with `lcpc-2d`
+
+- `lcpc-ligero-pc` - an R-S--based encoding for use with `lcpc-2d`
+
+- `lcpc-test-fields` - field definitions and misc for testing / benching
 
 - `scripts` - miscellaneous
-
-- `sdig-pc` - an expander-based encoding for use with `lcpc2d`
-
-- `test-fields` - field definitions and misc for testing / benching
 
 ## license
 

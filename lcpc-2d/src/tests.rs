@@ -1,6 +1,6 @@
 // Copyright 2021 Riad S. Wahby <rsw@cs.stanford.edu>
 //
-// This file is part of lcpc2d, which is part of lcpc.
+// This file is part of lcpc-2d, which is part of lcpc.
 //
 // Licensed under the Apache License, Version 2.0 (see
 // LICENSE or https://www.apache.org/licenses/LICENSE-2.0).
@@ -18,7 +18,7 @@ use merlin::Transcript;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::iter::repeat_with;
-use test_fields::ft63::*;
+use lcpc_test_fields::ft63::*;
 
 #[derive(Clone, Debug)]
 struct LigeroEncoding<Ft> {

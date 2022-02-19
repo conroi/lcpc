@@ -1,25 +1,25 @@
 // Copyright 2021 Riad S. Wahby <rsw@cs.stanford.edu>
 //
-// This file is part of sdig-pc, which is part of lcpc.
+// This file is part of lcpc-brakedown-pc, which is part of lcpc.
 //
 // Licensed under the Apache License, Version 2.0 (see
 // LICENSE or https://www.apache.org/licenses/LICENSE-2.0).
 // This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use super::{SdigCommit, SdigEncoding, SdigEncodingS};
+use super::{BrakedownCommit, SdigEncoding, SdigEncodingS};
 
 use blake3::Hasher as Blake3;
 use ff::Field;
 use itertools::iterate;
-use lcpc2d::{LcCommit, LcEncoding};
+use lcpc_2d::{LcCommit, LcEncoding};
+use lcpc_test_fields::{ft255::*, ft63::*, random_coeffs};
 use merlin::Transcript;
 use ndarray::{linalg::Dot, Array};
 use rand::{thread_rng, Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use sprs::{CsMat, TriMat};
 use std::iter::repeat_with;
-use test_fields::{ft255::*, ft63::*, random_coeffs};
 
 #[test]
 fn col_opens() {
@@ -194,7 +194,7 @@ fn end_to_end_one_proof() {
     // commit to a random polynomial at a random rate
     let coeffs = get_random_coeffs();
     let enc = SdigEncoding::new(coeffs.len(), 0);
-    let comm = SdigCommit::<Blake3, _>::commit(&coeffs, &enc).unwrap();
+    let comm = BrakedownCommit::<Blake3, _>::commit(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root();
 
@@ -244,7 +244,7 @@ fn end_to_end_one_proof_ml() {
     let lgl = 5 + rng.gen::<usize>() % 16;
     let coeffs = random_coeffs(lgl);
     let enc = SdigEncoding::new_ml(lgl, 0);
-    let comm = SdigCommit::<Blake3, _>::commit(&coeffs, &enc).unwrap();
+    let comm = BrakedownCommit::<Blake3, _>::commit(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root();
     assert_eq!(1 << lgl, comm.get_n_rows() * comm.get_n_per_row());
@@ -292,7 +292,7 @@ fn end_to_end_two_proofs() {
     // commit to a random polynomial at a random rate
     let coeffs = get_random_coeffs();
     let enc = SdigEncoding::new(coeffs.len(), 1);
-    let comm = SdigCommit::<Blake3, _>::commit(&coeffs, &enc).unwrap();
+    let comm = BrakedownCommit::<Blake3, _>::commit(&coeffs, &enc).unwrap();
     // this is the polynomial commitment
     let root = comm.get_root();
 

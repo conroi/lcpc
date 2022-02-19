@@ -1,6 +1,6 @@
 // Copyright 2021 Riad S. Wahby <rsw@cs.stanford.edu>
 //
-// This file is part of ligero-pc, which is part of lcpc.
+// This file is part of lcpc-ligero-pc, which is part of lcpc.
 //
 // Licensed under the Apache License, Version 2.0 (see
 // LICENSE or https://www.apache.org/licenses/LICENSE-2.0).
@@ -17,7 +17,7 @@ ligero-pc is a polynomial commitment based on R-S codes, from Ligero
 extern crate test;
 
 use fffft::{FFTError, FFTPrecomp, FieldFFT};
-use lcpc2d::{
+use lcpc_2d::{
     def_labels, n_degree_tests, FieldHash, LcCommit, LcEncoding, LcEvalProof, SizedField,
 };
 use typenum::{Unsigned, U1, U2};

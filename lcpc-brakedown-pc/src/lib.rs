@@ -1,6 +1,6 @@
 // Copyright 2021 Riad S. Wahby <rsw@cs.stanford.edu>
 //
-// This file is part of sdig-pc, which is part of lcpc.
+// This file is part of lcpc-brakedown-pc, which is part of lcpc.
 //
 // Licensed under the Apache License, Version 2.0 (see
 // LICENSE or https://www.apache.org/licenses/LICENSE-2.0).
@@ -21,7 +21,7 @@ use encode::{codeword_length, encode};
 use matgen::generate;
 
 use ff::Field;
-use lcpc2d::{
+use lcpc_2d::{
     def_labels, n_degree_tests, FieldHash, LcCommit, LcEncoding, LcEvalProof, SizedField,
 };
 use num_traits::Num;
@@ -179,7 +179,7 @@ where
 pub type SdigEncoding<F> = SdigEncodingS<F, SdigCodeDflt>;
 
 /// SDIG expander-based polynomial commitment
-pub type SdigCommit<D, F> = LcCommit<D, SdigEncoding<F>>;
+pub type BrakedownCommit<D, F> = LcCommit<D, SdigEncoding<F>>;
 
 /// An evaluation proof for SDIG expander-based polynomial commitment
-pub type SdigEvalProof<D, F> = LcEvalProof<D, SdigEncoding<F>>;
+pub type BrakedownEvalProof<D, F> = LcEvalProof<D, SdigEncoding<F>>;
