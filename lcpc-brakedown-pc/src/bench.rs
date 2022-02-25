@@ -7,7 +7,7 @@
 // This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use super::{SdigCommit, SdigEncoding};
+use super::{BrakedownCommit, SdigEncoding};
 
 use blake3::{Hasher as Blake3, traits::digest::Digest};
 use ff::{Field, PrimeField};
@@ -19,6 +19,16 @@ use sprs::MulAcc;
 use test::{black_box, Bencher};
 use lcpc_test_fields::{def_bench, ft127::*, ft255::*, random_coeffs};
 
+#[bench]
+fn matgen_bench(b: &mut Bencher) {
+    use super::codespec::SdigCode3 as TestCode;
+    use super::matgen::generate;
+
+    b.iter(|| {
+        generate::<Ft127, TestCode>(1048576, 0u64);
+    })
+}
+
 fn commit_bench<D, Ft>(b: &mut Bencher, log_len: usize)
 where
     D: Digest,
@@ -28,7 +38,7 @@ where
     let enc = SdigEncoding::new(coeffs.len(), 0);
 
     b.iter(|| {
-        black_box(SdigCommit::<D, Ft>::commit(&coeffs, &enc).unwrap());
+        black_box(BrakedownCommit::<D, Ft>::commit(&coeffs, &enc).unwrap());
     });
 }
 
@@ -39,7 +49,7 @@ where
 {
     let coeffs = random_coeffs(log_len);
     let enc = SdigEncoding::new(coeffs.len(), 0);
-    let comm = SdigCommit::<D, Ft>::commit(&coeffs, &enc).unwrap();
+    let comm = BrakedownCommit::<D, Ft>::commit(&coeffs, &enc).unwrap();
 
     // random point to eval at
     let x = Ft::random(&mut rand::thread_rng());
@@ -73,7 +83,7 @@ where
 {
     let coeffs = random_coeffs(log_len);
     let enc = SdigEncoding::new(coeffs.len(), 0);
-    let comm = SdigCommit::<D, Ft>::commit(&coeffs, &enc).unwrap();
+    let comm = BrakedownCommit::<D, Ft>::commit(&coeffs, &enc).unwrap();
 
     // random point to eval at
     let x = Ft::random(&mut rand::thread_rng());
