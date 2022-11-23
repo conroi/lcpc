@@ -1,6 +1,6 @@
 [package]
 name = "lcpc-2d"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["kwantam <kwantam@gmail.com>"]
 edition = "2018"
 description = "polynomial commitment scheme from linear codes"
@@ -12,7 +12,7 @@ repository = "https://github.com/conroi/lcpc"
 [dependencies]
 digest = "0.9"
 err-derive = "0.2"
-ff = "0.10"
+ff = "0.12"
 merlin = "2.0"
 rand = "0.8"
 rand_chacha = "0.3"

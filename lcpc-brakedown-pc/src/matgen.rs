@@ -173,7 +173,7 @@ where
 
             let val = {
                 let mut tmp = F::random(&mut rng);
-                while <F as Field>::is_zero(&tmp) {
+                while <F as Field>::is_zero(&tmp).into() {
                     tmp = F::random(&mut rng);
                 }
                 tmp
