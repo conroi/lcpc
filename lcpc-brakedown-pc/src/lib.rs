@@ -94,7 +94,7 @@ where
             n_cols,
             precodes,
             postcodes,
-            _p: std::marker::PhantomData::default(),
+            _p: std::marker::PhantomData,
         }
     }
 
@@ -132,7 +132,7 @@ where
             n_cols,
             precodes,
             postcodes,
-            _p: std::marker::PhantomData::default(),
+            _p: std::marker::PhantomData,
         }
     }
 }

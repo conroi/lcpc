@@ -1,6 +1,6 @@
 [package]
 name = "lcpc-test-fields"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2018"
 authors = ["kwantam <kwantam@gmail.com>"]
 description = "fields for testing polycommits"

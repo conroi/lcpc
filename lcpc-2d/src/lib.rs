@@ -206,7 +206,11 @@ where
         D: Digest,
         E: LcEncoding<F = F>,
     {
-        let hashes = self.hashes.into_iter().map(|c| c.unwrap::<D, E>().root).collect();
+        let hashes = self
+            .hashes
+            .into_iter()
+            .map(|c| c.unwrap::<D, E>().root)
+            .collect();
 
         LcCommit {
             comm: self.comm,
@@ -226,7 +230,11 @@ where
     E::F: Serialize,
 {
     fn wrapped(&self) -> WrappedLcCommit<FldT<E>> {
-        let hashes_wrapped = self.hashes.iter().map(|h| WrappedOutput { bytes: h.to_vec() }).collect();
+        let hashes_wrapped = self
+            .hashes
+            .iter()
+            .map(|h| WrappedOutput { bytes: h.to_vec() })
+            .collect();
 
         WrappedLcCommit {
             comm: self.comm.clone(),
@@ -1092,6 +1100,7 @@ where
     })
 }
 
+#[allow(clippy::only_used_in_recursion)]
 fn collapse_columns<E>(
     coeffs: &[FldT<E>],
     tensor: &[FldT<E>],

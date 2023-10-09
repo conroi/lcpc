@@ -14,11 +14,11 @@ use digest::Output;
 use ff::Field;
 use fffft::{FFTError, FFTPrecomp, FieldFFT};
 use itertools::iterate;
+use lcpc_test_fields::ft63::*;
 use merlin::Transcript;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::iter::repeat_with;
-use lcpc_test_fields::ft63::*;
 
 #[derive(Clone, Debug)]
 struct LigeroEncoding<Ft> {
@@ -298,8 +298,7 @@ fn end_to_end() {
     )
     .unwrap();
 
-    let root2 =
-        bincode::deserialize::<LcRoot<Blake3, LigeroEncoding<Ft63>>>(&encroot[..]).unwrap();
+    let root2 = bincode::deserialize::<LcRoot<Blake3, LigeroEncoding<Ft63>>>(&encroot[..]).unwrap();
     let pf2: LigeroEvalProof<Blake3, Ft63> = bincode::deserialize(&encoded[..]).unwrap();
     let mut tr3 = Transcript::new(b"test transcript");
     tr3.append_message(b"polycommit", root.as_ref());

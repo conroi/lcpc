@@ -143,7 +143,7 @@ where
             n_per_row,
             n_cols,
             pc,
-            _p: std::marker::PhantomData::default(),
+            _p: std::marker::PhantomData,
         }
     }
 }

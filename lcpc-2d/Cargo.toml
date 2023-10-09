@@ -1,6 +1,6 @@
 [package]
 name = "lcpc-2d"
-version = "0.1.1"
+version = "0.2.0"
 authors = ["kwantam <kwantam@gmail.com>"]
 edition = "2018"
 description = "polynomial commitment scheme from linear codes"
