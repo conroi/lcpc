@@ -4,10 +4,10 @@ members = [ "lcpc-2d", "lcpc-ligero-pc", "lcpc-brakedown-pc", "lcpc-test-fields"
 [workspace.dependencies]
 bincode = "1.3"
 bitvec = "1"
-blake3 = { version = "=1.2", features = ["traits-preview"] }
+blake3 = { version = "1.5", features = ["traits-preview"] }
 byteorder = "1"
 
-digest = "0.9"
+digest = "0.10"
 
 err-derive = "0.2"
 
