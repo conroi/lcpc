@@ -1,2 +1,40 @@
 [workspace]
 members = [ "lcpc-2d", "lcpc-ligero-pc", "lcpc-brakedown-pc", "lcpc-test-fields" ]
+
+[workspace.dependencies]
+bincode = "1.3"
+bitvec = "1"
+blake3 = { version = "1.2", features = ["traits-preview"] }
+byteorder = "1"
+
+digest = "0.9"
+
+err-derive = "0.2"
+
+ff = "0.12"
+ff-derive-num = "0.2"
+fffft = "0.4"
+
+itertools = "0.10"
+
+lcpc-2d = { path = "./lcpc-2d" }
+lcpc-test-fields = { path = "./lcpc-test-fields" }
+
+merlin = "2.0"
+
+ndarray = ">=0.11.0,<0.15"
+num-traits = "0.2"
+
+paste = "1.0"
+
+rand = "0.8"
+rand_chacha = "0.3"
+rand_core = "0.6"
+rayon = "1.5"
+
+serde = { version = "1.0", features = ["derive"] }
+serde_bytes = "0.11"
+sprs = "0.10"
+subtle = "2.2"
+
+typenum = "1.13"

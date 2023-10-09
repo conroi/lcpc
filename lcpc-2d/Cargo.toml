@@ -10,19 +10,19 @@ repository = "https://github.com/conroi/lcpc"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-digest = "0.9"
-err-derive = "0.2"
-ff = "0.12"
-merlin = "2.0"
-rand = "0.8"
-rand_chacha = "0.3"
-rayon = "1.5"
-serde = { version = "1.0", features = ["derive"] }
-serde_bytes = "0.11"
+digest.workspace = true
+err-derive.workspace = true
+ff.workspace = true
+merlin.workspace = true
+rand.workspace = true
+rand_chacha.workspace = true
+rayon.workspace = true
+serde.workspace = true
+serde_bytes.workspace = true
 
 [dev-dependencies]
-bincode = "1.3"
-blake3 = { version = "1", features = ["traits-preview"] }
-fffft = "0.4"
-itertools = "0.10"
-lcpc-test-fields = { path = "../lcpc-test-fields" }
+bincode.workspace = true
+blake3.workspace = true
+fffft.workspace = true
+itertools.workspace = true
+lcpc-test-fields.workspace = true
