@@ -175,12 +175,18 @@ where
     D: Digest,
     E: LcEncoding,
 {
-    comm: Vec<FldT<E>>,
-    coeffs: Vec<FldT<E>>,
-    n_rows: usize,
-    n_cols: usize,
-    n_per_row: usize,
-    hashes: Vec<Output<D>>,
+    /// The encoded values
+    pub comm: Vec<FldT<E>>,
+    /// The coefficients pre-encoding
+    pub coeffs: Vec<FldT<E>>,
+    /// Number of rows in the commitment
+    pub n_rows: usize,
+    /// Number of columns in the commitment
+    pub n_cols: usize,
+    /// Number of pre-encoded values per row
+    pub n_per_row: usize,
+    /// Hashed values for Merkle commit
+    pub hashes: Vec<Output<D>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -326,7 +332,8 @@ where
     D: Digest,
     E: LcEncoding,
 {
-    root: Output<D>,
+    /// The Merkle root
+    pub root: Output<D>,
     _p: std::marker::PhantomData<E>,
 }
 
@@ -411,8 +418,10 @@ where
     D: Digest,
     E: LcEncoding,
 {
-    col: Vec<FldT<E>>,
-    path: Vec<Output<D>>,
+    /// The values in the column
+    pub col: Vec<FldT<E>>,
+    /// The Merkle path
+    pub path: Vec<Output<D>>,
 }
 
 impl<D, E> LcColumn<D, E>
@@ -501,10 +510,14 @@ where
     D: Digest,
     E: LcEncoding,
 {
-    n_cols: usize,
-    p_eval: Vec<FldT<E>>,
-    p_random_vec: Vec<Vec<FldT<E>>>,
-    columns: Vec<LcColumn<D, E>>,
+    /// Number of columns in this proof
+    pub n_cols: usize,
+    /// Evaluation row
+    pub p_eval: Vec<FldT<E>>,
+    /// Random combinations of rows
+    pub p_random_vec: Vec<Vec<FldT<E>>>,
+    /// Opened columns
+    pub columns: Vec<LcColumn<D, E>>,
 }
 
 impl<D, E> LcEvalProof<D, E>
@@ -557,7 +570,7 @@ where
 
 /// An evaluation and proof of its correctness and of the low-degreeness of the commitment.
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct WrappedLcEvalProof<F>
+struct WrappedLcEvalProof<F>
 where
     F: Serialize,
 {
