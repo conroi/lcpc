@@ -21,7 +21,7 @@ use rayon::prelude::*;
 use sprs::CsMat;
 
 const fn ceil_muldiv(n: usize, num: usize, den: usize) -> usize {
-    (n * num + den - 1) / den
+    (n * num).div_ceil(den)
 }
 
 /// Generate a random code from a given seed

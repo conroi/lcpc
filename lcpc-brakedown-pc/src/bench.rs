@@ -9,15 +9,15 @@
 
 use super::{BrakedownCommit, SdigEncoding};
 
-use blake3::{Hasher as Blake3, traits::digest::Digest};
+use blake3::{traits::digest::Digest, Hasher as Blake3};
 use ff::{Field, PrimeField};
 use itertools::iterate;
 use lcpc_2d::{FieldHash, LcEncoding};
+use lcpc_test_fields::{def_bench, ft127::*, ft255::*, random_coeffs};
 use merlin::Transcript;
 use num_traits::Num;
 use sprs::MulAcc;
 use test::{black_box, Bencher};
-use lcpc_test_fields::{def_bench, ft127::*, ft255::*, random_coeffs};
 
 #[bench]
 fn matgen_bench(b: &mut Bencher) {

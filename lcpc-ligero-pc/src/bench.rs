@@ -9,13 +9,13 @@
 
 use super::LigeroEncodingRho;
 
-use blake3::{Hasher as Blake3, traits::digest::Digest};
+use blake3::{traits::digest::Digest, Hasher as Blake3};
 use fffft::FieldFFT;
 use itertools::iterate;
 use lcpc_2d::{FieldHash, LcCommit, LcEncoding, SizedField};
+use lcpc_test_fields::{def_bench, ft127::*, ft255::*, random_coeffs};
 use merlin::Transcript;
 use test::{black_box, Bencher};
-use lcpc_test_fields::{def_bench, ft127::*, ft255::*, random_coeffs};
 use typenum::{Unsigned, U39 as TLo};
 
 type THi = <TLo as std::ops::Add<typenum::U1>>::Output;
