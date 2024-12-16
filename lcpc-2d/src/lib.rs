@@ -12,7 +12,7 @@
 lcpc2d is a polynomial commitment scheme based on linear codes
 */
 
-use digest::{Digest, Output};
+use digest::{Digest, FixedOutputReset, Output};
 use err_derive::Error;
 use ff::{Field, PrimeField};
 use merlin::Transcript;
@@ -175,12 +175,18 @@ where
     D: Digest,
     E: LcEncoding,
 {
-    comm: Vec<FldT<E>>,
-    coeffs: Vec<FldT<E>>,
-    n_rows: usize,
-    n_cols: usize,
-    n_per_row: usize,
-    hashes: Vec<Output<D>>,
+    /// The encoded values
+    pub comm: Vec<FldT<E>>,
+    /// The coefficients pre-encoding
+    pub coeffs: Vec<FldT<E>>,
+    /// Number of rows in the commitment
+    pub n_rows: usize,
+    /// Number of columns in the commitment
+    pub n_cols: usize,
+    /// Number of pre-encoded values per row
+    pub n_per_row: usize,
+    /// Hashed values for Merkle commit
+    pub hashes: Vec<Output<D>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -206,7 +212,11 @@ where
         D: Digest,
         E: LcEncoding<F = F>,
     {
-        let hashes = self.hashes.into_iter().map(|c| c.unwrap::<D, E>().root).collect();
+        let hashes = self
+            .hashes
+            .into_iter()
+            .map(|c| c.unwrap::<D, E>().root)
+            .collect();
 
         LcCommit {
             comm: self.comm,
@@ -226,7 +236,11 @@ where
     E::F: Serialize,
 {
     fn wrapped(&self) -> WrappedLcCommit<FldT<E>> {
-        let hashes_wrapped = self.hashes.iter().map(|h| WrappedOutput { bytes: h.to_vec() }).collect();
+        let hashes_wrapped = self
+            .hashes
+            .iter()
+            .map(|h| WrappedOutput { bytes: h.to_vec() })
+            .collect();
 
         WrappedLcCommit {
             comm: self.comm.clone(),
@@ -269,7 +283,7 @@ where
 
 impl<D, E> LcCommit<D, E>
 where
-    D: Digest,
+    D: Digest + FixedOutputReset,
     E: LcEncoding,
 {
     /// returns the Merkle root of this polynomial commitment (which is the commitment itself)
@@ -318,7 +332,8 @@ where
     D: Digest,
     E: LcEncoding,
 {
-    root: Output<D>,
+    /// The Merkle root
+    pub root: Output<D>,
     _p: std::marker::PhantomData<E>,
 }
 
@@ -403,8 +418,10 @@ where
     D: Digest,
     E: LcEncoding,
 {
-    col: Vec<FldT<E>>,
-    path: Vec<Output<D>>,
+    /// The values in the column
+    pub col: Vec<FldT<E>>,
+    /// The Merkle path
+    pub path: Vec<Output<D>>,
 }
 
 impl<D, E> LcColumn<D, E>
@@ -493,15 +510,19 @@ where
     D: Digest,
     E: LcEncoding,
 {
-    n_cols: usize,
-    p_eval: Vec<FldT<E>>,
-    p_random_vec: Vec<Vec<FldT<E>>>,
-    columns: Vec<LcColumn<D, E>>,
+    /// Number of columns in this proof
+    pub n_cols: usize,
+    /// Evaluation row
+    pub p_eval: Vec<FldT<E>>,
+    /// Random combinations of rows
+    pub p_random_vec: Vec<Vec<FldT<E>>>,
+    /// Opened columns
+    pub columns: Vec<LcColumn<D, E>>,
 }
 
 impl<D, E> LcEvalProof<D, E>
 where
-    D: Digest,
+    D: Digest + FixedOutputReset,
     E: LcEncoding,
 {
     /// Get the number of elements in an encoded vector
@@ -549,7 +570,7 @@ where
 
 /// An evaluation and proof of its correctness and of the low-degreeness of the commitment.
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct WrappedLcEvalProof<F>
+struct WrappedLcEvalProof<F>
 where
     F: Serialize,
 {
@@ -612,7 +633,7 @@ where
 /// for a code with `len`-length codewords over `flog2`-bit field
 pub fn n_degree_tests(lambda: usize, len: usize, flog2: usize) -> usize {
     let den = flog2 - log2(len);
-    (lambda + den - 1) / den
+    lambda.div_ceil(den)
 }
 
 // parallelization limit when working on columns
@@ -621,7 +642,7 @@ const LOG_MIN_NCOLS: usize = 5;
 /// Commit to a univariate polynomial whose coefficients are `coeffs` using encoding `enc`
 fn commit<D, E>(coeffs_in: &[FldT<E>], enc: &E) -> ProverResult<LcCommit<D, E>, ErrT<E>>
 where
-    D: Digest,
+    D: Digest + FixedOutputReset,
     E: LcEncoding,
 {
     let (n_rows, n_per_row, n_cols) = enc.get_dims(coeffs_in.len());
@@ -689,7 +710,7 @@ where
 
 fn merkleize<D, E>(comm: &mut LcCommit<D, E>)
 where
-    D: Digest,
+    D: Digest + FixedOutputReset,
     E: LcEncoding,
 {
     // step 1: hash each column of the commitment (we always reveal a full column)
@@ -746,7 +767,7 @@ fn hash_columns<D, E>(
 
 fn merkle_tree<D>(ins: &[Output<D>], outs: &mut [Output<D>])
 where
-    D: Digest,
+    D: Digest + FixedOutputReset,
 {
     // array should always be of length 2^k - 1
     assert_eq!(ins.len(), outs.len() + 1);
@@ -761,7 +782,7 @@ where
 
 fn merkle_layer<D>(ins: &[Output<D>], outs: &mut [Output<D>])
 where
-    D: Digest,
+    D: Digest + FixedOutputReset,
 {
     assert_eq!(ins.len(), 2 * outs.len());
 
@@ -769,8 +790,8 @@ where
         // base case: just compute all of the hashes
         let mut digest = D::new();
         for idx in 0..outs.len() {
-            digest.update(ins[2 * idx].as_ref());
-            digest.update(ins[2 * idx + 1].as_ref());
+            Digest::update(&mut digest, ins[2 * idx].as_ref());
+            Digest::update(&mut digest, ins[2 * idx + 1].as_ref());
             outs[idx] = digest.finalize_reset();
         }
     } else {
@@ -838,7 +859,7 @@ fn verify<D, E>(
     tr: &mut Transcript,
 ) -> VerifierResult<FldT<E>, ErrT<E>>
 where
-    D: Digest,
+    D: Digest + FixedOutputReset,
     E: LcEncoding,
 {
     // make sure arguments are well formed
@@ -954,11 +975,11 @@ where
 // Check a column opening
 fn verify_column_path<D, E>(column: &LcColumn<D, E>, col_num: usize, root: &Output<D>) -> bool
 where
-    D: Digest,
+    D: Digest + FixedOutputReset,
     E: LcEncoding,
 {
     let mut digest = D::new();
-    digest.update(<Output<D> as Default>::default());
+    Digest::update(&mut digest, <Output<D> as Default>::default());
     for e in &column.col[..] {
         e.digest_update(&mut digest);
     }
@@ -968,11 +989,11 @@ where
     let mut col = col_num;
     for p in &column.path[..] {
         if col % 2 == 0 {
-            digest.update(&hash);
-            digest.update(p);
+            Digest::update(&mut digest, &hash);
+            Digest::update(&mut digest, p);
         } else {
-            digest.update(p);
-            digest.update(&hash);
+            Digest::update(&mut digest, p);
+            Digest::update(&mut digest, &hash);
         }
         hash = digest.finalize_reset();
         col >>= 1;
@@ -1092,6 +1113,7 @@ where
     })
 }
 
+#[allow(clippy::only_used_in_recursion)]
 fn collapse_columns<E>(
     coeffs: &[FldT<E>],
     tensor: &[FldT<E>],
@@ -1167,7 +1189,7 @@ fn verify_column<D, E>(
     poly_eval: &FldT<E>,
 ) -> bool
 where
-    D: Digest,
+    D: Digest + FixedOutputReset,
     E: LcEncoding,
 {
     verify_column_path(column, col_num, root) && verify_column_value(column, tensor, poly_eval)

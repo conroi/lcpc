@@ -13,11 +13,11 @@ use blake3::Hasher as Blake3;
 use ff::Field;
 use itertools::iterate;
 use lcpc_2d::{LcCommit, LcEncoding};
+use lcpc_test_fields::{ft255::*, ft63::*, random_coeffs};
 use merlin::Transcript;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::iter::repeat_with;
-use lcpc_test_fields::{ft255::*, ft63::*, random_coeffs};
 
 #[test]
 fn get_dims() {
@@ -56,16 +56,16 @@ fn col_opens() {
     );
 }
 
-#[cfg(feature="isz")]
-use typenum::U38 as TLo;
-#[cfg(not(feature="isz"))]
+#[cfg(not(feature = "isz"))]
 use typenum::U1 as TLo;
+#[cfg(feature = "isz")]
+use typenum::U38 as TLo;
 
-#[cfg(feature="isz")]
-use typenum::U39 as THi;
-#[cfg(all(not(feature="isz"), feature="hlf"))]
+#[cfg(all(not(feature = "isz"), feature = "hlf"))]
 use typenum::U2 as THi;
-#[cfg(all(not(feature="isz"),not(feature="hlf")))]
+#[cfg(feature = "isz")]
+use typenum::U39 as THi;
+#[cfg(all(not(feature = "isz"), not(feature = "hlf")))]
 use typenum::U4 as THi;
 
 #[test]

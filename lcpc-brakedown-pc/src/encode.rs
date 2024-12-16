@@ -14,8 +14,8 @@ use ndarray::{linalg::Dot, ArrayView};
 use num_traits::Num;
 use sprs::{CsMat, MulAcc};
 
-// given a set of precodes and postcodes, output length of codeword
-pub(super) fn codeword_length<F>(precodes: &[CsMat<F>], postcodes: &[CsMat<F>]) -> usize
+/// given a set of precodes and postcodes, output length of codeword
+pub fn codeword_length<F>(precodes: &[CsMat<F>], postcodes: &[CsMat<F>]) -> usize
 where
     F: Field + Num,
 {

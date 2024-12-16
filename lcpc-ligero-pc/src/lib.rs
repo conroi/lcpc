@@ -85,7 +85,7 @@ where
 
         // minimize nr subject to #cols and RHO
         let np1 = nc1 * Self::_rho_num() / Self::_rho_den();
-        let nr1 = (len + np1 - 1) / np1;
+        let nr1 = len.div_ceil(np1);
         let nd1 = Self::_n_degree_tests(nc1);
         //assert!(np1.is_power_of_two());
         assert!(np1 * nr1 >= len);
@@ -93,7 +93,7 @@ where
 
         let nc2 = nc1 / 2;
         let np2 = np1 / 2;
-        let nr2 = (len + np2 - 1) / np2;
+        let nr2 = len.div_ceil(np2);
         let nd2 = Self::_n_degree_tests(nc2);
         //assert!(np2.is_power_of_two());
         assert!(nc2.is_power_of_two());
@@ -143,7 +143,7 @@ where
             n_per_row,
             n_cols,
             pc,
-            _p: std::marker::PhantomData::default(),
+            _p: std::marker::PhantomData,
         }
     }
 }
@@ -164,7 +164,7 @@ where
     }
 
     fn get_dims(&self, len: usize) -> (usize, usize, usize) {
-        let n_rows = (len + self.n_per_row - 1) / self.n_per_row;
+        let n_rows = len.div_ceil(self.n_per_row);
         (n_rows, self.n_per_row, self.n_cols)
     }
 
